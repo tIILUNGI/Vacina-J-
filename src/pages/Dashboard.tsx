@@ -51,13 +51,35 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
     fetchData();
   }, []);
 
+  const calculateRemainingPercentage = (expiry: string, totalHours: number) => {
+    const remaining = new Date(expiry).getTime() - Date.now();
+    const total = totalHours * 60 * 60 * 1000;
+    return Math.max(0, Math.min(100, (remaining / total) * 100));
+  };
+
   const calculateTimeRemaining = (expiry: string) => {
     const remaining = new Date(expiry).getTime() - Date.now();
     if (remaining <= 0) return 'Expirado';
     const hours = Math.floor(remaining / (1000 * 60 * 60));
     const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}min`;
+    return `${hours}h ${minutes}m`;
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-pulse">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-32 bg-white rounded-[32px] border border-slate-100 shadow-sm" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 h-[400px] bg-white rounded-[32px] border border-slate-100 shadow-sm" />
+          <div className="h-[400px] bg-white rounded-[32px] border border-slate-100 shadow-sm" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -67,14 +89,14 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
           title="Doses Hoje" 
           value={stats.dosesHoje} 
           icon={Syringe} 
-          color="bg-emerald-500" 
+          color="bg-rose-500" 
           delay={0}
         />
         <StatCard 
           title="Pacientes Vacinados" 
           value={stats.pacientesHoje} 
           icon={Users} 
-          color="bg-blue-500" 
+          color="bg-emerald-500" 
           delay={0.1}
         />
         <StatCard 
@@ -88,7 +110,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
           title="Alertas Pendentes" 
           value={stats.alertasPendentes} 
           icon={Bell} 
-          color="bg-rose-500" 
+          color="bg-purple-500" 
           delay={0.3}
         />
       </div>
@@ -97,26 +119,27 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
         {/* Main Section */}
         <div className="lg:col-span-2 space-y-8">
           <div className="card">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-slate-800">Lista do Dia</h2>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">Lista do Dia</h2>
               <button 
                 onClick={() => onNavigate('vaccinate')}
-                className="text-emerald-600 text-sm font-medium hover:underline flex items-center gap-1"
+                className="text-blue-600 text-sm font-bold hover:underline flex items-center gap-1"
               >
                 Ver todos <ChevronRight size={16} />
               </button>
             </div>
             
             <div className="space-y-4">
-              {/* Placeholder for today's list */}
-              <div className="flex items-center justify-center py-12 text-slate-400 flex-col gap-2">
-                <Users size={48} strokeWidth={1} />
-                <p>Nenhum paciente previsto para hoje</p>
+              <div className="flex items-center justify-center py-16 text-slate-400 flex-col gap-4 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm">
+                  <Users size={40} strokeWidth={1} className="text-slate-300" />
+                </div>
+                <p className="font-medium">Nenhum paciente previsto para hoje</p>
                 <button 
                   onClick={() => onNavigate('vaccinate')}
-                  className="btn-primary mt-4"
+                  className="btn-primary mt-2"
                 >
-                  <Plus size={18} /> Novo Atendimento
+                  <Plus size={20} /> Novo Atendimento
                 </button>
               </div>
             </div>
@@ -126,42 +149,68 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
         {/* Sidebar Section */}
         <div className="space-y-8">
           <div className="card">
-            <h2 className="text-lg font-semibold text-slate-800 mb-6">Frascos Ativos</h2>
+            <h2 className="text-xl font-black text-slate-900 mb-8 tracking-tight">Frascos Ativos</h2>
             <div className="space-y-6">
               {openVials.length > 0 ? (
                 openVials.map((vial) => (
-                  <div key={vial.id} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium text-slate-700">{vial.vacina_nome}</span>
-                      <span className="text-slate-500">{vial.doses_restantes} doses rest.</span>
+                  <div key={vial.id} className="flex items-center gap-6 p-4 rounded-3xl bg-slate-50 border border-slate-100">
+                    <div className="relative w-16 h-16 flex-shrink-0">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle
+                          cx="32"
+                          cy="32"
+                          r="28"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="transparent"
+                          className="text-slate-200"
+                        />
+                        <motion.circle
+                          cx="32"
+                          cy="32"
+                          r="28"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="transparent"
+                          strokeDasharray={175.9}
+                          initial={{ strokeDashoffset: 175.9 }}
+                          animate={{ strokeDashoffset: 175.9 - (175.9 * calculateRemainingPercentage(vial.data_expiracao_uso, vial.prazo_uso_horas || 6)) / 100 }}
+                          className="text-blue-600"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Clock size={16} className="text-blue-600" />
+                      </div>
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-emerald-500 rounded-full" 
-                        style={{ width: `${(vial.doses_restantes / 10) * 100}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
-                      <Clock size={12} />
-                      <span>{calculateTimeRemaining(vial.data_expiracao_uso)} restantes</span>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-black text-slate-900 truncate">{vial.vacina_nome}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">
+                          {calculateTimeRemaining(vial.data_expiracao_uso)}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                          {vial.doses_restantes} doses
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-6 text-slate-400 text-sm">
+                <div className="text-center py-10 text-slate-400 text-sm font-medium">
                   Nenhum frasco aberto no momento
                 </div>
               )}
             </div>
           </div>
 
-          <div className="card bg-rose-50 border-rose-100">
-            <div className="flex items-center gap-2 text-rose-700 font-semibold mb-4">
-              <AlertCircle size={20} />
+          <div className="card bg-rose-50 border-rose-100 shadow-rose-500/5">
+            <div className="flex items-center gap-3 text-rose-700 font-black mb-6 uppercase tracking-tight">
+              <AlertCircle size={24} />
               <h2>Alertas Críticos</h2>
             </div>
             <div className="space-y-3">
-              <p className="text-sm text-rose-600">Nenhum alerta crítico detectado.</p>
+              <p className="text-sm text-rose-600 font-medium">Nenhum alerta crítico detectado.</p>
             </div>
           </div>
         </div>
@@ -173,17 +222,17 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
 function StatCard({ title, value, icon: Icon, color, delay }: any) {
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay }}
-      className="card flex items-center gap-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4 }}
+      className="card flex items-center gap-6 hover:shadow-xl hover:shadow-blue-500/5 transition-all group"
     >
-      <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-${color.split('-')[1]}-200`}>
-        <Icon size={24} />
+      <div className={`w-16 h-16 ${color} rounded-[24px] flex items-center justify-center text-white shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform`}>
+        <Icon size={32} />
       </div>
       <div>
-        <p className="text-sm text-slate-500 font-medium">{title}</p>
-        <p className="text-2xl font-bold text-slate-800">{value}</p>
+        <p className="text-sm text-slate-500 font-bold uppercase tracking-widest mb-1">{title}</p>
+        <p className="text-3xl font-black text-slate-900 tracking-tight">{value}</p>
       </div>
     </motion.div>
   );

@@ -3,14 +3,25 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("flame_me.db");
+// Database Initialization with optimized settings
+const db = new Database("vacina_ja.db");
+db.pragma('journal_mode = WAL'); // Better performance for concurrent reads/writes
 
-// Initialize database schema
+// Initialize database schema with professional constraints and indices
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT CHECK(role IN ('admin', 'enfermeiro')) DEFAULT 'enfermeiro',
+    nome_completo TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS pacientes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
@@ -22,9 +33,11 @@ db.exec(`
     data_parto DATE,
     localidade TEXT,
     contacto_responsavel TEXT,
-    numero_identificacao TEXT,
+    numero_identificacao TEXT UNIQUE,
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE INDEX IF NOT EXISTS idx_paciente_nome ON pacientes(nome);
+  CREATE INDEX IF NOT EXISTS idx_paciente_bi ON pacientes(numero_identificacao);
 
   CREATE TABLE IF NOT EXISTS vacinas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +45,9 @@ db.exec(`
     doses_por_frasco INTEGER NOT NULL,
     prazo_uso_horas INTEGER NOT NULL,
     grupo_alvo TEXT, -- crianca | mif | gravida | puerpera | adulto | hpv
-    total_doses_esquema INTEGER NOT NULL
+    total_doses_esquema INTEGER NOT NULL,
+    idade_minima_meses INTEGER DEFAULT 0,
+    idade_maxima_meses INTEGER DEFAULT 1200
   );
 
   CREATE TABLE IF NOT EXISTS frascos_stock (
@@ -47,20 +62,23 @@ db.exec(`
     data_entrada DATE DEFAULT CURRENT_DATE,
     FOREIGN KEY (vacina_id) REFERENCES vacinas(id)
   );
+  CREATE INDEX IF NOT EXISTS idx_stock_vacina ON frascos_stock(vacina_id, estado);
 
   CREATE TABLE IF NOT EXISTS administracoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     paciente_id INTEGER,
     vacina_id INTEGER,
     frasco_id INTEGER,
+    user_id INTEGER,
     numero_dose INTEGER NOT NULL,
     data_administracao DATE DEFAULT CURRENT_DATE,
-    responsavel TEXT,
     observacoes TEXT,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (vacina_id) REFERENCES vacinas(id),
-    FOREIGN KEY (frasco_id) REFERENCES frascos_stock(id)
+    FOREIGN KEY (frasco_id) REFERENCES frascos_stock(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );
+  CREATE INDEX IF NOT EXISTS idx_admin_data ON administracoes(data_administracao);
 
   CREATE TABLE IF NOT EXISTS desperdicio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,42 +88,53 @@ db.exec(`
     data_registo DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (frasco_id) REFERENCES frascos_stock(id)
   );
+
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    acao TEXT NOT NULL,
+    entidade TEXT,
+    entidade_id INTEGER,
+    detalhes TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
-// Populate initial vaccines if empty
-const vaccineCount = db.prepare("SELECT COUNT(*) as count FROM vacinas").get() as { count: number };
-if (vaccineCount.count === 0) {
-  const insertVaccine = db.prepare(`
-    INSERT INTO vacinas (nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-
-  const initialVaccines = [
-    ["BCG", 20, 6, "crianca", 1],
-    ["HepB0", 1, 24, "crianca", 1],
-    ["Polio 0", 20, 72, "crianca", 1],
-    ["Polio 1", 20, 72, "crianca", 1],
-    ["Polio 2", 20, 72, "crianca", 1],
-    ["Polio 3", 20, 72, "crianca", 1],
-    ["Penta 1", 10, 168, "crianca", 1],
-    ["Penta 2", 10, 168, "crianca", 1],
-    ["Penta 3", 10, 168, "crianca", 1],
-    ["Pneumo 1", 1, 168, "crianca", 1],
-    ["Pneumo 2", 1, 168, "crianca", 1],
-    ["Pneumo 3", 1, 168, "crianca", 1],
-    ["Rotavirus 1", 1, 24, "crianca", 1],
-    ["Rotavirus 2", 1, 24, "crianca", 1],
-    ["Sarampo-Rubeola 1", 10, 6, "crianca", 1],
-    ["Sarampo-Rubeola 2", 10, 6, "crianca", 1],
-    ["HPV", 1, 168, "hpv", 2],
-    ["Toxoide Td", 10, 168, "mif", 5],
-    ["Vitamina A", 1, 24, "puerpera", 1]
-  ];
-
-  for (const v of initialVaccines) {
-    insertVaccine.run(...v);
+// Seed initial data
+const seedData = () => {
+  const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as any;
+  if (userCount.count === 0) {
+    db.prepare("INSERT INTO users (username, password, role, nome_completo) VALUES (?, ?, ?, ?)").run('admin', 'admin123', 'admin', 'Administrador do Posto');
+    db.prepare("INSERT INTO users (username, password, role, nome_completo) VALUES (?, ?, ?, ?)").run('enfermeiro', 'pav123', 'enfermeiro', 'Enfermeiro de Turno');
   }
-}
+
+  const vaccineCount = db.prepare("SELECT COUNT(*) as count FROM vacinas").get() as any;
+  if (vaccineCount.count === 0) {
+    const insertVaccine = db.prepare(`
+      INSERT INTO vacinas (nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema, idade_minima_meses, idade_maxima_meses)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const initialVaccines = [
+      ["BCG", 20, 6, "crianca", 1, 0, 12],
+      ["HepB0", 1, 24, "crianca", 1, 0, 1],
+      ["Polio 0", 20, 72, "crianca", 1, 0, 1],
+      ["Polio 1", 20, 72, "crianca", 1, 2, 60],
+      ["Penta 1", 10, 168, "crianca", 1, 2, 24],
+      ["Pneumo 1", 1, 168, "crianca", 1, 2, 24],
+      ["Rotavirus 1", 1, 24, "crianca", 1, 2, 4],
+      ["HPV", 1, 168, "hpv", 2, 108, 144],
+      ["Toxoide Td", 10, 168, "mif", 5, 180, 600],
+      ["Vitamina A", 1, 24, "puerpera", 1, 180, 600]
+    ];
+
+    for (const v of initialVaccines) {
+      insertVaccine.run(...v);
+    }
+  }
+};
+seedData();
 
 async function startServer() {
   const app = express();
@@ -113,9 +142,76 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API Routes
-  
-  // Patients
+  // Middleware for simple logging
+  const logAction = (userId: number, acao: string, entidade?: string, entidadeId?: number, detalhes?: string) => {
+    try {
+      db.prepare("INSERT INTO audit_logs (user_id, acao, entidade, entidade_id, detalhes) VALUES (?, ?, ?, ?, ?)").run(userId, acao, entidade, entidadeId, detalhes);
+    } catch (e) {
+      console.error("Audit log error:", e);
+    }
+  };
+
+  // Auth API
+  app.post("/api/auth/login", (req, res) => {
+    const { username, password } = req.body;
+    const user = db.prepare("SELECT id, username, role, nome_completo FROM users WHERE username = ? AND password = ?").get(username, password) as any;
+    if (user) {
+      logAction(user.id, "LOGIN", "users", user.id);
+      res.json(user);
+    } else {
+      res.status(401).json({ error: "Credenciais inválidas" });
+    }
+  });
+
+  // Users API
+  app.get("/api/users", (req, res) => {
+    const users = db.prepare("SELECT id, username, role, nome_completo FROM users ORDER BY nome_completo ASC").all();
+    res.json(users);
+  });
+
+  app.post("/api/users", (req, res) => {
+    const { username, password, role, nome_completo } = req.body;
+    try {
+      const info = db.prepare(`
+        INSERT INTO users (username, password, role, nome_completo)
+        VALUES (?, ?, ?, ?)
+      `).run(username, password, role, nome_completo);
+      res.json({ id: info.lastInsertRowid });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/users/:id", (req, res) => {
+    const { username, password, role, nome_completo } = req.body;
+    try {
+      if (password) {
+        db.prepare(`
+          UPDATE users SET username = ?, password = ?, role = ?, nome_completo = ?
+          WHERE id = ?
+        `).run(username, password, role, nome_completo, req.params.id);
+      } else {
+        db.prepare(`
+          UPDATE users SET username = ?, role = ?, nome_completo = ?
+          WHERE id = ?
+        `).run(username, role, nome_completo, req.params.id);
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/users/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Patients API
   app.get("/api/pacientes", (req, res) => {
     const q = req.query.q as string;
     let patients;
@@ -128,33 +224,99 @@ async function startServer() {
   });
 
   app.post("/api/pacientes", (req, res) => {
-    const { nome, data_nascimento, sexo, gravida, mulher_idade_fertil, puerpera, data_parto, localidade, contacto_responsavel, numero_identificacao } = req.body;
-    const info = db.prepare(`
-      INSERT INTO pacientes (nome, data_nascimento, sexo, gravida, mulher_idade_fertil, puerpera, data_parto, localidade, contacto_responsavel, numero_identificacao)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(nome, data_nascimento, sexo, gravida ? 1 : 0, mulher_idade_fertil ? 1 : 0, puerpera ? 1 : 0, data_parto, localidade, contacto_responsavel, numero_identificacao);
-    res.json({ id: info.lastInsertRowid });
+    const { nome, data_nascimento, sexo, gravida, mulher_idade_fertil, puerpera, data_parto, localidade, contacto_responsavel, numero_identificacao, userId } = req.body;
+    try {
+      const info = db.prepare(`
+        INSERT INTO pacientes (nome, data_nascimento, sexo, gravida, mulher_idade_fertil, puerpera, data_parto, localidade, contacto_responsavel, numero_identificacao)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(nome, data_nascimento, sexo, gravida ? 1 : 0, mulher_idade_fertil ? 1 : 0, puerpera ? 1 : 0, data_parto, localidade, contacto_responsavel, numero_identificacao);
+      
+      logAction(userId || 1, "CREATE", "pacientes", Number(info.lastInsertRowid), `Paciente: ${nome}`);
+      res.json({ id: info.lastInsertRowid });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/pacientes/:id", (req, res) => {
+    const { nome, data_nascimento, sexo, gravida, mulher_idade_fertil, puerpera, data_parto, localidade, contacto_responsavel, numero_identificacao, userId } = req.body;
+    try {
+      db.prepare(`
+        UPDATE pacientes SET nome = ?, data_nascimento = ?, sexo = ?, gravida = ?, mulher_idade_fertil = ?, puerpera = ?, data_parto = ?, localidade = ?, contacto_responsavel = ?, numero_identificacao = ?
+        WHERE id = ?
+      `).run(nome, data_nascimento, sexo, gravida ? 1 : 0, mulher_idade_fertil ? 1 : 0, puerpera ? 1 : 0, data_parto, localidade, contacto_responsavel, numero_identificacao, req.params.id);
+      
+      logAction(userId || 1, "UPDATE", "pacientes", Number(req.params.id), `Paciente: ${nome}`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/pacientes/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM pacientes WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
   });
 
   app.get("/api/pacientes/:id", (req, res) => {
     const patient = db.prepare("SELECT * FROM pacientes WHERE id = ?").get(req.params.id);
     const history = db.prepare(`
-      SELECT a.*, v.nome as vacina_nome 
+      SELECT a.*, v.nome as vacina_nome, u.nome_completo as responsavel_nome
       FROM administracoes a 
       JOIN vacinas v ON a.vacina_id = v.id 
+      LEFT JOIN users u ON a.user_id = u.id
       WHERE a.paciente_id = ?
       ORDER BY a.data_administracao DESC
     `).all(req.params.id);
     res.json({ ...patient, history });
   });
 
-  // Vaccines
+  // Vaccines API
   app.get("/api/vacinas", (req, res) => {
-    const vaccines = db.prepare("SELECT * FROM vacinas").all();
+    const vaccines = db.prepare("SELECT * FROM vacinas ORDER BY nome ASC").all();
     res.json(vaccines);
   });
 
-  // Stock
+  app.post("/api/vacinas", (req, res) => {
+    const { nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema } = req.body;
+    try {
+      const info = db.prepare(`
+        INSERT INTO vacinas (nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema);
+      res.json({ id: info.lastInsertRowid });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/vacinas/:id", (req, res) => {
+    const { nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema } = req.body;
+    try {
+      db.prepare(`
+        UPDATE vacinas SET nome = ?, doses_por_frasco = ?, prazo_uso_horas = ?, grupo_alvo = ?, total_doses_esquema = ?
+        WHERE id = ?
+      `).run(nome, doses_por_frasco, prazo_uso_horas, grupo_alvo, total_doses_esquema, req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/vacinas/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM vacinas WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Stock API
   app.get("/api/stock", (req, res) => {
     const stock = db.prepare(`
       SELECT v.nome as vacina_nome, v.id as vacina_id, 
@@ -169,18 +331,19 @@ async function startServer() {
   });
 
   app.get("/api/stock/abertos", (req, res) => {
-    const openVials = db.prepare(`
+    const abertos = db.prepare(`
       SELECT f.*, v.nome as vacina_nome, v.prazo_uso_horas
       FROM frascos_stock f
       JOIN vacinas v ON f.vacina_id = v.id
-      WHERE f.estado = 'aberto'
+      WHERE f.estado = 'aberto' AND f.doses_restantes > 0
+      ORDER BY f.data_expiracao_uso ASC
     `).all();
-    res.json(openVials);
+    res.json(abertos);
   });
 
   app.post("/api/stock/entrada", (req, res) => {
-    const { vacina_id, lote, validade, quantidade } = req.body;
-    const vacina = db.prepare("SELECT doses_por_frasco FROM vacinas WHERE id = ?").get(vacina_id) as any;
+    const { vacina_id, lote, validade, quantidade, userId } = req.body;
+    const vacina = db.prepare("SELECT doses_por_frasco, nome FROM vacinas WHERE id = ?").get(vacina_id) as any;
     
     const insert = db.prepare(`
       INSERT INTO frascos_stock (vacina_id, lote, validade, doses_restantes, estado)
@@ -190,12 +353,33 @@ async function startServer() {
     for (let i = 0; i < quantidade; i++) {
       insert.run(vacina_id, lote, validade, vacina.doses_por_frasco);
     }
+    logAction(userId || 1, "STOCK_ENTRY", "vacinas", vacina_id, `Entrada de ${quantidade} frascos de ${vacina.nome}, lote ${lote}`);
     res.json({ success: true });
   });
 
-  // Administration
+  app.get("/api/stock/history", (req, res) => {
+    const history = db.prepare(`
+      SELECT f.*, v.nome as vacina_nome 
+      FROM frascos_stock f 
+      JOIN vacinas v ON f.vacina_id = v.id 
+      ORDER BY f.data_entrada DESC 
+      LIMIT 100
+    `).all();
+    res.json(history);
+  });
+
+  app.delete("/api/stock/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM frascos_stock WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: "Não é possível eliminar um frasco com administrações registadas." });
+    }
+  });
+
+  // Administration API
   app.post("/api/administrar", (req, res) => {
-    const { paciente_id, vacina_id, responsavel, observacoes } = req.body;
+    const { paciente_id, vacina_id, user_id, observacoes } = req.body;
     
     // 1. Find open vial
     let vial = db.prepare(`
@@ -204,7 +388,6 @@ async function startServer() {
     `).get(vacina_id) as any;
 
     if (!vial) {
-      // 2. Open new vial if none open
       vial = db.prepare(`
         SELECT * FROM frascos_stock 
         WHERE vacina_id = ? AND estado = 'disponivel' AND validade > date('now')
@@ -224,20 +407,18 @@ async function startServer() {
         SET estado = 'aberto', data_abertura = ?, data_expiracao_uso = ? 
         WHERE id = ?
       `).run(dataAbertura, dataExpiracao, vial.id);
-      
-      vial.id = vial.id;
-      vial.doses_restantes = vial.doses_restantes;
+      logAction(user_id, "OPEN_VIAL", "frascos_stock", vial.id);
     }
 
-    // 3. Register administration
+    // 2. Register administration
     const nextDose = (db.prepare("SELECT COUNT(*) as count FROM administracoes WHERE paciente_id = ? AND vacina_id = ?").get(paciente_id, vacina_id) as any).count + 1;
     
-    db.prepare(`
-      INSERT INTO administracoes (paciente_id, vacina_id, frasco_id, numero_dose, responsavel, observacoes)
+    const info = db.prepare(`
+      INSERT INTO administracoes (paciente_id, vacina_id, frasco_id, user_id, numero_dose, observacoes)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(paciente_id, vacina_id, vial.id, nextDose, responsavel, observacoes);
+    `).run(paciente_id, vacina_id, vial.id, user_id, nextDose, observacoes);
 
-    // 4. Update vial doses
+    // 3. Update vial doses
     const newDoses = vial.doses_restantes - 1;
     db.prepare(`
       UPDATE frascos_stock 
@@ -245,6 +426,7 @@ async function startServer() {
       WHERE id = ?
     `).run(newDoses, newDoses === 0 ? 'consumido' : 'aberto', vial.id);
 
+    logAction(user_id, "ADMINISTER", "administracoes", Number(info.lastInsertRowid), `Paciente ID: ${paciente_id}, Vacina ID: ${vacina_id}`);
     res.json({ success: true });
   });
 
@@ -253,57 +435,34 @@ async function startServer() {
     const dosesHoje = db.prepare("SELECT COUNT(*) as count FROM administracoes WHERE data_administracao = date('now')").get() as any;
     const pacientesHoje = db.prepare("SELECT COUNT(DISTINCT paciente_id) as count FROM administracoes WHERE data_administracao = date('now')").get() as any;
     const frascosAbertos = db.prepare("SELECT COUNT(*) as count FROM frascos_stock WHERE estado = 'aberto'").get() as any;
+    const stockBaixo = db.prepare(`
+      SELECT COUNT(*) as count FROM (
+        SELECT vacina_id FROM frascos_stock WHERE estado = 'disponivel' GROUP BY vacina_id HAVING COUNT(*) < 3
+      )
+    `).get() as any;
     
     res.json({
       dosesHoje: dosesHoje.count,
       pacientesHoje: pacientesHoje.count,
       frascosAbertos: frascosAbertos.count,
-      alertasPendentes: 0 // Placeholder
+      alertasPendentes: stockBaixo.count
     });
   });
 
-  // Waste detection (should be called periodically or on dashboard load)
-  app.post("/api/cron/check-waste", (req, res) => {
-    const expiredVials = db.prepare(`
-      SELECT * FROM frascos_stock 
-      WHERE (estado = 'aberto' AND data_expiracao_uso < datetime('now'))
-         OR (estado = 'disponivel' AND validade < date('now'))
-    `).all() as any[];
-
-    for (const vial of expiredVials) {
-      db.prepare(`
-        INSERT INTO desperdicio (frasco_id, doses_desperdicadas, motivo)
-        VALUES (?, ?, ?)
-      `).run(vial.id, vial.doses_restantes, vial.estado === 'aberto' ? 'prazo_expirado' : 'validade_vencida');
-
-      db.prepare("UPDATE frascos_stock SET estado = 'expirado', doses_restantes = 0 WHERE id = ?").run(vial.id);
+  // Backup API
+  app.get("/api/system/backup", (req, res) => {
+    try {
+      const backupPath = path.join(__dirname, "vacina_ja_backup.db");
+      db.backup(backupPath)
+        .then(() => {
+          res.download(backupPath);
+        })
+        .catch((err) => {
+          res.status(500).json({ error: "Erro ao gerar backup" });
+        });
+    } catch (e) {
+      res.status(500).json({ error: "Erro no sistema de backup" });
     }
-    res.json({ processed: expiredVials.length });
-  });
-
-  // Reports
-  app.get("/api/relatorios/diario", (req, res) => {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
-    const report = db.prepare(`
-      SELECT a.*, p.nome as paciente_nome, p.data_nascimento, v.nome as vacina_nome
-      FROM administracoes a
-      JOIN pacientes p ON a.paciente_id = p.id
-      JOIN vacinas v ON a.vacina_id = v.id
-      WHERE a.data_administracao = ?
-    `).all(date);
-    res.json(report);
-  });
-
-  app.get("/api/relatorios/mensal", (req, res) => {
-    const month = req.query.month || new Date().toISOString().slice(0, 7); // YYYY-MM
-    const report = db.prepare(`
-      SELECT v.nome as vacina_nome, a.numero_dose, COUNT(*) as total
-      FROM administracoes a
-      JOIN vacinas v ON a.vacina_id = v.id
-      WHERE strftime('%Y-%m', a.data_administracao) = ?
-      GROUP BY v.id, a.numero_dose
-    `).all(month);
-    res.json(report);
   });
 
   // Vite middleware for development
@@ -321,7 +480,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Vacina Já Server running on http://localhost:${PORT}`);
   });
 }
 

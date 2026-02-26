@@ -24,12 +24,16 @@ export default function Patients() {
   const [search, setSearch] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     fetchPatients();
     fetchVaccines();
+    const savedUser = localStorage.getItem('vacina_ja_user');
+    if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
   const fetchPatients = async (query = '') => {
@@ -70,55 +74,73 @@ export default function Patients() {
     }
   };
 
+  const handleDeletePatient = async (id: number) => {
+    if (!confirm('Tem certeza que deseja eliminar este paciente?')) return;
+    try {
+      const res = await fetch(`/api/pacientes/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSelectedPatient(null);
+        fetchPatients();
+      }
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-        <form onSubmit={handleSearch} className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+      <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+        <form onSubmit={handleSearch} className="relative w-full md:w-[400px]">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={22} />
           <input 
             type="text"
             placeholder="Pesquisar por nome ou BI..."
-            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            className="input-field pl-12"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </form>
         <button 
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setEditingPatient(null);
+            setShowAddForm(true);
+          }}
           className="btn-primary"
         >
-          <UserPlus size={20} /> Novo Paciente
+          <UserPlus size={24} /> Novo Cadastro
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         {/* Patients List */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="card p-0 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="font-semibold text-slate-800">Lista de Pacientes</h2>
+        <div className="lg:col-span-1 space-y-6">
+          <div className="card p-0 overflow-hidden border-none shadow-xl shadow-blue-900/5">
+            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+              <h2 className="font-black text-slate-900 uppercase tracking-tight">Lista de Pacientes</h2>
             </div>
-            <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+            <div className="divide-y divide-slate-50 max-h-[700px] overflow-y-auto">
               {loading ? (
-                <div className="p-8 text-center text-slate-400">Carregando...</div>
+                <div className="p-12 text-center text-slate-400 font-medium">Carregando...</div>
               ) : patients.length > 0 ? (
                 patients.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => handleSelectPatient(p.id)}
-                    className={`w-full p-4 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${
-                      selectedPatient?.id === p.id ? 'bg-emerald-50/50' : ''
+                    className={`w-full p-6 text-left hover:bg-blue-50 transition-all flex items-center justify-between group ${
+                      selectedPatient?.id === p.id ? 'bg-blue-50/50' : ''
                     }`}
                   >
                     <div>
-                      <p className="font-medium text-slate-800 group-hover:text-emerald-700 transition-colors">{p.nome}</p>
-                      <p className="text-xs text-slate-500">BI: {p.numero_identificacao || 'N/A'}</p>
+                      <p className="font-black text-slate-900 group-hover:text-blue-600 transition-colors">{p.nome}</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">BI: {p.numero_identificacao || 'N/A'}</p>
                     </div>
-                    <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
+                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
+                      <ChevronRight size={16} />
+                    </div>
                   </button>
                 ))
               ) : (
-                <div className="p-8 text-center text-slate-400">Nenhum paciente encontrado.</div>
+                <div className="p-12 text-center text-slate-400 font-medium">Nenhum paciente encontrado.</div>
               )}
             </div>
           </div>
@@ -133,70 +155,89 @@ export default function Patients() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6"
+                className="space-y-8"
               >
-                <div className="card">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex gap-4 items-center">
-                      <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center text-2xl font-bold">
-                        {selectedPatient.nome.charAt(0)}
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-bold text-slate-800">{selectedPatient.nome}</h2>
-                        <p className="text-slate-500 flex items-center gap-1">
-                          <Calendar size={14} /> 
-                          {new Date(selectedPatient.data_nascimento).toLocaleDateString('pt-AO')} 
-                          ({calculateAge(selectedPatient.data_nascimento).years} anos)
-                        </p>
-                      </div>
+                <div className="card border-none shadow-2xl shadow-blue-900/5 p-8">
+                  <div className="flex justify-between items-start mb-10">
+                  <div className="flex flex-col sm:flex-row gap-6 items-center">
+                    <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-[28px] flex items-center justify-center text-3xl font-black shadow-inner">
+                      {selectedPatient.nome.charAt(0)}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="text-center sm:text-left">
+                      <h2 className="text-3xl font-black text-slate-900 tracking-tight">{selectedPatient.nome}</h2>
+                      <p className="text-slate-500 flex items-center justify-center sm:justify-start gap-2 font-bold mt-1">
+                        <Calendar size={18} className="text-blue-600" /> 
+                        {new Date(selectedPatient.data_nascimento).toLocaleDateString('pt-AO')} 
+                        <span className="text-blue-400">({calculateAge(selectedPatient.data_nascimento).years} anos)</span>
+                      </p>
+                    </div>
+                  </div>
+                    <div className="flex gap-3">
+                      {user?.role === 'admin' && (
+                        <>
+                          <button 
+                            onClick={() => {
+                              setEditingPatient(selectedPatient);
+                              setShowAddForm(true);
+                            }}
+                            className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-colors"
+                          >
+                            <Users size={20} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeletePatient(selectedPatient.id)}
+                            className="p-3 bg-rose-50 text-rose-600 rounded-2xl hover:bg-rose-100 transition-colors"
+                          >
+                            <XCircle size={20} />
+                          </button>
+                        </>
+                      )}
                       {selectedPatient.gravida && (
-                        <span className="px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-xs font-bold uppercase tracking-wider">Grávida</span>
+                        <span className="px-4 py-2 bg-pink-50 text-pink-600 rounded-2xl text-xs font-black uppercase tracking-widest border border-pink-100">Grávida</span>
                       )}
                       {selectedPatient.puerpera && (
-                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold uppercase tracking-wider">Puérpera</span>
+                        <span className="px-4 py-2 bg-purple-50 text-purple-600 rounded-2xl text-xs font-black uppercase tracking-widest border border-purple-100">Puérpera</span>
                       )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 py-6 border-y border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 py-8 border-y border-slate-50">
                     <InfoItem icon={IdCard} label="Identificação" value={selectedPatient.numero_identificacao || 'N/A'} />
                     <InfoItem icon={Phone} label="Contacto" value={selectedPatient.contacto_responsavel || 'N/A'} />
                     <InfoItem icon={MapPin} label="Localidade" value={selectedPatient.localidade || 'N/A'} />
                     <InfoItem icon={Calendar} label="Sexo" value={selectedPatient.sexo === 'M' ? 'Masculino' : 'Feminino'} />
                   </div>
 
-                  <div className="mt-8">
-                    <div className="flex gap-4 border-b border-slate-100 mb-6">
-                      <button className="pb-4 border-b-2 border-emerald-600 text-emerald-700 font-medium">Calendário Vacinal</button>
-                      <button className="pb-4 text-slate-500 hover:text-slate-700 transition-colors">Histórico Completo</button>
+                  <div className="mt-10">
+                    <div className="flex gap-8 border-b border-slate-50 mb-8">
+                      <button className="pb-4 border-b-4 border-blue-600 text-blue-600 font-black uppercase tracking-widest text-sm">Calendário Vacinal</button>
+                      <button className="pb-4 text-slate-400 hover:text-slate-900 transition-colors font-bold uppercase tracking-widest text-sm">Histórico Completo</button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {vaccines.map((v) => {
                         const status = getVaccineStatus(selectedPatient, v, (selectedPatient as any).history || []);
                         return (
-                          <div key={v.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/30 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                                status.status === 'complete' ? 'bg-emerald-100 text-emerald-600' :
-                                status.status === 'due' ? 'bg-amber-100 text-amber-600' :
-                                'bg-slate-100 text-slate-400'
+                          <div key={v.id} className="p-6 rounded-[28px] border border-slate-50 bg-slate-50/30 flex items-center justify-between group hover:bg-white hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${
+                                status.status === 'complete' ? 'bg-blue-50 text-blue-600' :
+                                status.status === 'due' ? 'bg-blue-400 text-white' :
+                                'bg-slate-200 text-slate-400'
                               }`}>
-                                <Syringe size={20} />
+                                <Syringe size={24} />
                               </div>
                               <div>
-                                <p className="font-medium text-slate-800">{v.nome}</p>
-                                <p className="text-xs text-slate-500">{status.label}</p>
+                                <p className="font-black text-slate-900 tracking-tight">{v.nome}</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">{status.label}</p>
                               </div>
                             </div>
                             {status.status === 'complete' ? (
-                              <CheckCircle2 size={20} className="text-emerald-500" />
+                              <CheckCircle2 size={24} className="text-blue-600" />
                             ) : status.status === 'due' ? (
-                              <Clock size={20} className="text-amber-500" />
+                              <Clock size={24} className="text-blue-400" />
                             ) : (
-                              <AlertCircle size={20} className="text-slate-300" />
+                              <AlertCircle size={24} className="text-slate-200" />
                             )}
                           </div>
                         );
@@ -206,93 +247,106 @@ export default function Patients() {
                 </div>
               </motion.div>
             ) : (
-              <div className="card h-full flex flex-col items-center justify-center py-24 text-slate-400">
-                <Users size={64} strokeWidth={1} className="mb-4" />
-                <p className="text-lg">Seleccione um paciente para ver os detalhes</p>
+              <div className="card h-full flex flex-col items-center justify-center py-32 text-slate-300 border-none bg-slate-50/30">
+                <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center mb-6 shadow-sm">
+                  <Users size={64} strokeWidth={1} />
+                </div>
+                <p className="text-xl font-black text-slate-900 tracking-tight">Seleccione um paciente para ver os detalhes</p>
               </div>
             )}
           </AnimatePresence>
         </div>
       </div>
 
-      {/* Add Patient Modal */}
+      {/* Add/Edit Patient Modal */}
       <AnimatePresence>
         {showAddForm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[32px] lg:rounded-[40px] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h2 className="text-xl font-bold text-slate-800">Novo Cadastro</h2>
-                <button onClick={() => setShowAddForm(false)} className="text-slate-400 hover:text-slate-600">
+              <div className="p-6 lg:p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50 flex-shrink-0">
+                <h2 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight uppercase">
+                  {editingPatient ? 'Editar Cadastro' : 'Novo Cadastro'}
+                </h2>
+                <button onClick={() => setShowAddForm(false)} className="w-10 h-10 flex items-center justify-center bg-white rounded-xl text-slate-400 hover:text-slate-900 transition-all shadow-sm">
                   <X size={24} />
                 </button>
               </div>
-              <form className="p-8 space-y-6" onSubmit={async (e) => {
+              <form className="p-6 lg:p-10 space-y-6 lg:space-y-8 overflow-y-auto" onSubmit={async (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const data = Object.fromEntries(formData.entries());
                 try {
-                  const res = await fetch('/api/pacientes', {
-                    method: 'POST',
+                  const url = editingPatient ? `/api/pacientes/${editingPatient.id}` : '/api/pacientes';
+                  const method = editingPatient ? 'PUT' : 'POST';
+                  const res = await fetch(url, {
+                    method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify({ ...data, userId: user?.id })
                   });
                   if (res.ok) {
                     setShowAddForm(false);
                     fetchPatients();
+                    if (editingPatient) handleSelectPatient(editingPatient.id);
                   }
                 } catch (error) {
-                  console.error('Error adding patient:', error);
+                  console.error('Error saving patient:', error);
                 }
               }}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Nome Completo *</label>
-                    <input name="nome" required className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" />
+                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Nome Completo *</label>
+                    <input name="nome" defaultValue={editingPatient?.nome} required className="input-field" placeholder="Nome do paciente" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Data de Nascimento *</label>
-                    <input name="data_nascimento" type="date" required className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" />
+                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Data de Nascimento *</label>
+                    <input name="data_nascimento" defaultValue={editingPatient?.data_nascimento} type="date" required className="input-field" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Sexo *</label>
-                    <select name="sexo" required className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none">
+                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Sexo *</label>
+                    <select name="sexo" defaultValue={editingPatient?.sexo} required className="input-field">
                       <option value="M">Masculino</option>
                       <option value="F">Feminino</option>
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Nº Identificação (BI/Cartão)</label>
-                    <input name="numero_identificacao" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" />
+                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Nº Identificação (BI/Cartão)</label>
+                    <input name="numero_identificacao" defaultValue={editingPatient?.numero_identificacao} className="input-field" placeholder="000000000LA000" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Localidade / Bairro</label>
-                    <input name="localidade" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" />
+                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Localidade / Bairro</label>
+                    <input name="localidade" defaultValue={editingPatient?.localidade} className="input-field" placeholder="Ex: Maianga" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Contacto Responsável</label>
-                    <input name="contacto_responsavel" className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" />
+                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Contacto Responsável</label>
+                    <input name="contacto_responsavel" defaultValue={editingPatient?.contacto_responsavel} className="input-field" placeholder="+244 9XX XXX XXX" />
                   </div>
                 </div>
 
-                <div className="flex gap-6 pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="gravida" className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500" />
-                    <span className="text-sm text-slate-700">Está Grávida?</span>
+                <div className="flex gap-8 p-6 bg-blue-50/50 rounded-3xl border border-blue-100">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className="relative flex items-center">
+                      <input type="checkbox" name="gravida" defaultChecked={editingPatient?.gravida} className="peer w-6 h-6 rounded-lg border-2 border-blue-200 text-blue-600 focus:ring-blue-500 transition-all cursor-pointer" />
+                    </div>
+                    <span className="text-sm font-black text-slate-700 uppercase tracking-widest group-hover:text-blue-600 transition-colors">Está Grávida?</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="puerpera" className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500" />
-                    <span className="text-sm text-slate-700">Puérpera?</span>
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className="relative flex items-center">
+                      <input type="checkbox" name="puerpera" defaultChecked={editingPatient?.puerpera} className="peer w-6 h-6 rounded-lg border-2 border-blue-200 text-blue-600 focus:ring-blue-500 transition-all cursor-pointer" />
+                    </div>
+                    <span className="text-sm font-black text-slate-700 uppercase tracking-widest group-hover:text-blue-600 transition-colors">Puérpera?</span>
                   </label>
                 </div>
 
-                <div className="flex justify-end gap-4 pt-6 border-t border-slate-100">
-                  <button type="button" onClick={() => setShowAddForm(false)} className="btn-secondary">Cancelar</button>
-                  <button type="submit" className="btn-primary">Salvar Cadastro</button>
+                <div className="flex justify-end gap-4 pt-8 border-t border-slate-50">
+                  <button type="button" onClick={() => setShowAddForm(false)} className="btn-secondary px-8">Cancelar</button>
+                  <button type="submit" className="btn-primary px-10">
+                    {editingPatient ? 'Salvar Alterações' : 'Salvar Cadastro'}
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -305,11 +359,11 @@ export default function Patients() {
 
 function InfoItem({ icon: Icon, label, value }: any) {
   return (
-    <div className="space-y-1">
-      <p className="text-xs text-slate-400 font-medium uppercase tracking-wider flex items-center gap-1">
-        <Icon size={12} /> {label}
+    <div className="space-y-2">
+      <p className="text-xs text-slate-400 font-black uppercase tracking-widest flex items-center gap-2">
+        <Icon size={14} className="text-blue-600" /> {label}
       </p>
-      <p className="text-sm font-semibold text-slate-700">{value}</p>
+      <p className="text-base font-black text-slate-900 tracking-tight">{value}</p>
     </div>
   );
 }

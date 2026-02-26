@@ -9,7 +9,8 @@ import {
   UserPlus,
   X,
   Info,
-  History
+  History,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Patient, Vaccine, Administration, getVaccineStatus, calculateAge } from '../utils/vaccineRules';
@@ -21,10 +22,12 @@ export default function Vaccinate() {
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState<Vaccine | null>(null);
-  const [responsible, setResponsible] = useState('Enfermeiro de Turno');
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     fetchVaccines();
+    const savedUser = localStorage.getItem('vacina_ja_user');
+    if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
   const fetchVaccines = async () => {
@@ -75,14 +78,13 @@ export default function Vaccinate() {
         body: JSON.stringify({
           paciente_id: selectedPatient?.id,
           vacina_id: vaccine.id,
-          responsavel: responsible,
+          user_id: user?.id,
           observacoes: ''
         })
       });
       
       if (res.ok) {
         setShowConfirm(null);
-        // Refresh patient data
         if (selectedPatient) handleSelectPatient(selectedPatient);
       } else {
         const err = await res.json();
@@ -97,16 +99,16 @@ export default function Vaccinate() {
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Search Section */}
       <div className="relative z-50">
-        <div className="card p-4 flex items-center gap-4">
-          <Search className="text-slate-400" size={24} />
+        <div className="card p-5 flex items-center gap-6 shadow-2xl shadow-blue-900/5 border-none bg-white/90 backdrop-blur-md">
+          <Search className="text-[--color-brand-primary]" size={28} />
           <input 
             type="text"
             placeholder="Pesquisar paciente por nome ou BI..."
-            className="flex-1 bg-transparent border-none outline-none text-lg text-slate-800 placeholder:text-slate-400"
+            className="flex-1 bg-transparent border-none outline-none text-xl font-bold text-slate-900 placeholder:text-slate-300"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
           />
-          {loading && <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />}
+          {loading && <div className="w-6 h-6 border-3 border-[--color-brand-primary] border-t-transparent rounded-full animate-spin" />}
         </div>
 
         <AnimatePresence>
@@ -115,19 +117,21 @@ export default function Vaccinate() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden"
+              className="absolute top-full left-0 right-0 mt-4 bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden z-[60]"
             >
               {patients.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => handleSelectPatient(p)}
-                  className="w-full p-4 text-left hover:bg-slate-50 flex items-center justify-between group border-b border-slate-100 last:border-0"
+                  className="w-full p-6 text-left hover:bg-blue-50 flex items-center justify-between group border-b border-slate-50 last:border-0 transition-colors"
                 >
                   <div>
-                    <p className="font-semibold text-slate-800 group-hover:text-emerald-700">{p.nome}</p>
-                    <p className="text-xs text-slate-500">BI: {p.numero_identificacao || 'N/A'} • {calculateAge(p.data_nascimento).years} anos</p>
+                    <p className="font-black text-slate-900 group-hover:text-[--color-brand-primary] transition-colors">{p.nome}</p>
+                    <p className="text-sm text-slate-500 font-medium">BI: {p.numero_identificacao || 'N/A'} • {calculateAge(p.data_nascimento).years} anos</p>
                   </div>
-                  <ChevronRight size={18} className="text-slate-300 group-hover:text-emerald-500" />
+                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-[--color-brand-primary] group-hover:text-white transition-all">
+                    <ChevronRight size={20} />
+                  </div>
                 </button>
               ))}
             </motion.div>
@@ -143,30 +147,30 @@ export default function Vaccinate() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="space-y-6"
+            className="space-y-8"
           >
-            <div className="card bg-emerald-600 text-white border-none flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-bold">
+            <div className="card bg-[--color-brand-primary] text-white border-none flex items-center justify-between shadow-2xl shadow-blue-600/20 p-8">
+              <div className="flex items-center gap-6">
+                <div className="w-20 h-20 bg-white/20 rounded-[28px] flex items-center justify-center text-3xl font-black backdrop-blur-md shadow-inner">
                   {selectedPatient.nome.charAt(0)}
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold">{selectedPatient.nome}</h2>
-                  <p className="text-emerald-100 flex items-center gap-1">
-                    <Clock size={14} /> 
+                  <h2 className="text-3xl font-black tracking-tight">{selectedPatient.nome}</h2>
+                  <p className="text-blue-100 flex items-center gap-2 font-bold mt-1">
+                    <Clock size={18} /> 
                     {calculateAge(selectedPatient.data_nascimento).years} anos, {calculateAge(selectedPatient.data_nascimento).months} meses
                   </p>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedPatient(null)}
-                className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                className="w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-2xl transition-all"
               >
-                <X size={24} />
+                <X size={28} />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {vaccines.map((v) => {
                 const status = getVaccineStatus(selectedPatient, v, (selectedPatient as any).history || []);
                 return (
@@ -174,25 +178,25 @@ export default function Vaccinate() {
                     key={v.id}
                     disabled={status.status === 'complete' || status.status === 'blocked'}
                     onClick={() => setShowConfirm(v)}
-                    className={`p-5 rounded-2xl border text-left transition-all flex items-center justify-between group ${
-                      status.status === 'complete' ? 'bg-emerald-50 border-emerald-100 opacity-80 cursor-default' :
-                      status.status === 'due' ? 'bg-white border-slate-200 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10' :
-                      'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed'
+                    className={`p-6 rounded-[32px] border-2 text-left transition-all flex items-center justify-between group ${
+                      status.status === 'complete' ? 'bg-blue-50 border-blue-100 opacity-90 cursor-default' :
+                      status.status === 'due' ? 'bg-white border-slate-100 hover:border-blue-600 hover:shadow-2xl hover:shadow-blue-500/10' :
+                      'bg-slate-50 border-slate-50 opacity-50 cursor-not-allowed'
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                        status.status === 'complete' ? 'bg-emerald-100 text-emerald-600' :
-                        status.status === 'due' ? 'bg-emerald-600 text-white' :
+                    <div className="flex items-center gap-5">
+                      <div className={`w-14 h-14 rounded-[24px] flex items-center justify-center shadow-sm ${
+                        status.status === 'complete' ? 'bg-white text-blue-600' :
+                        status.status === 'due' ? 'bg-blue-600 text-white' :
                         'bg-slate-200 text-slate-400'
                       }`}>
-                        <Syringe size={24} />
+                        <Syringe size={28} />
                       </div>
                       <div>
-                        <p className="font-bold text-slate-800">{v.nome}</p>
-                        <p className={`text-xs font-medium ${
-                          status.status === 'complete' ? 'text-emerald-600' :
-                          status.status === 'due' ? 'text-amber-600' :
+                        <p className="font-black text-slate-900 text-lg tracking-tight">{v.nome}</p>
+                        <p className={`text-xs font-black uppercase tracking-widest mt-0.5 ${
+                          status.status === 'complete' ? 'text-blue-600' :
+                          status.status === 'due' ? 'text-blue-400' :
                           'text-slate-400'
                         }`}>
                           {status.label}
@@ -200,23 +204,23 @@ export default function Vaccinate() {
                       </div>
                     </div>
                     {status.status === 'due' && (
-                      <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Plus size={18} />
+                      <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
+                        <Plus size={24} />
                       </div>
                     )}
-                    {status.status === 'complete' && <CheckCircle2 size={24} className="text-emerald-500" />}
+                    {status.status === 'complete' && <CheckCircle2 size={32} className="text-blue-600" />}
                   </button>
                 );
               })}
             </div>
           </motion.div>
         ) : (
-          <div className="card py-24 flex flex-col items-center justify-center text-slate-400">
-            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-              <Search size={40} strokeWidth={1} />
+          <div className="card py-32 flex flex-col items-center justify-center text-slate-400 border-dashed border-4 border-slate-100 bg-slate-50/30">
+            <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center mb-8 shadow-sm">
+              <Search size={48} strokeWidth={1.5} className="text-slate-200" />
             </div>
-            <h2 className="text-xl font-semibold text-slate-600 mb-2">Pronto para Vacinar</h2>
-            <p className="text-center max-w-sm">Pesquise um paciente para ver o calendário vacinal e registar novas doses com apenas 3 cliques.</p>
+            <h2 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Pronto para Vacinar</h2>
+            <p className="text-center max-w-sm font-medium text-slate-500">Pesquise um paciente para ver o calendário vacinal e registar novas doses com apenas 3 cliques.</p>
           </div>
         )}
       </AnimatePresence>
@@ -224,52 +228,48 @@ export default function Vaccinate() {
       {/* Confirmation Modal */}
       <AnimatePresence>
         {showConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden"
             >
-              <div className="p-8 text-center space-y-6">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                  <Syringe size={40} />
+              <div className="p-10 text-center space-y-8">
+                <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[32px] flex items-center justify-center mx-auto shadow-inner">
+                  <ShieldCheck size={48} />
                 </div>
                 
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-bold text-slate-800">Confirmar Administração</h3>
-                  <p className="text-slate-500">
-                    Está prestes a registar a vacina <span className="font-bold text-slate-800">{showConfirm.nome}</span> para <span className="font-bold text-slate-800">{selectedPatient?.nome}</span>.
+                <div className="space-y-3">
+                  <h3 className="text-3xl font-black text-slate-900 tracking-tight">Confirmar Vacinação</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">
+                    Está prestes a registar a vacina <span className="font-black text-blue-600">{showConfirm.nome}</span> para <span className="font-black text-slate-900">{selectedPatient?.nome}</span>.
                   </p>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-2xl text-left space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Responsável:</span>
-                    <input 
-                      className="font-bold text-slate-800 bg-transparent border-none text-right outline-none focus:ring-0"
-                      value={responsible}
-                      onChange={(e) => setResponsible(e.target.value)}
-                    />
+                <div className="bg-slate-50 p-6 rounded-3xl text-left space-y-4 border border-slate-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Responsável</span>
+                    <span className="font-black text-slate-900">{user?.nome_completo}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Data:</span>
-                    <span className="font-bold text-slate-800">{new Date().toLocaleDateString('pt-AO')}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Data</span>
+                    <span className="font-black text-slate-900">{new Date().toLocaleDateString('pt-AO')}</span>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-4">
                   <button 
                     onClick={() => handleAdminister(showConfirm)}
-                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-lg shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+                    className="btn-primary w-full py-5 text-xl bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-600/20"
                   >
                     Confirmar e Registar
                   </button>
                   <button 
                     onClick={() => setShowConfirm(null)}
-                    className="w-full py-4 text-slate-400 font-medium hover:text-slate-600 transition-colors"
+                    className="w-full py-4 text-slate-400 font-black uppercase tracking-widest text-xs hover:text-slate-600 transition-colors"
                   >
-                    Cancelar
+                    Cancelar Operação
                   </button>
                 </div>
               </div>
@@ -277,6 +277,7 @@ export default function Vaccinate() {
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }

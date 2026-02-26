@@ -32,56 +32,64 @@ export default function Alerts() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-12">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Central de Alertas</h2>
-          <p className="text-slate-500">Monitorização em tempo real das actividades do posto.</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Central de Alertas</h2>
+          <p className="text-slate-500 font-medium">Monitorização em tempo real das actividades do posto.</p>
         </div>
-        <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
-          <Bell size={24} />
+        <div className="w-16 h-16 bg-blue-50 text-[--color-brand-primary] rounded-[24px] flex items-center justify-center shadow-inner">
+          <Bell size={32} />
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {alerts.map((alert) => (
           <motion.div 
             key={alert.id}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`card border-l-4 ${
-              alert.color === 'rose' ? 'border-l-rose-500 bg-rose-50/30' :
-              alert.color === 'amber' ? 'border-l-amber-500 bg-amber-50/30' :
-              'border-l-blue-500 bg-blue-50/30'
-            } flex items-start gap-4 p-5`}
+            className={`card border-none shadow-xl shadow-blue-900/5 ${
+              alert.color === 'rose' ? 'bg-rose-50/50' :
+              alert.color === 'amber' ? 'bg-amber-50/50' :
+              'bg-blue-50/50'
+            } flex items-start gap-6 p-6 relative overflow-hidden group hover:shadow-2xl transition-all`}
           >
-            <div className={`p-3 rounded-xl ${
-              alert.color === 'rose' ? 'bg-rose-100 text-rose-600' :
-              alert.color === 'amber' ? 'bg-amber-100 text-amber-600' :
-              'bg-blue-100 text-blue-600'
+            <div className={`absolute left-0 top-0 bottom-0 w-2 ${
+              alert.color === 'rose' ? 'bg-rose-500' :
+              alert.color === 'amber' ? 'bg-amber-500' :
+              'bg-blue-500'
+            }`} />
+            
+            <div className={`p-4 rounded-[20px] shadow-sm ${
+              alert.color === 'rose' ? 'bg-white text-rose-600' :
+              alert.color === 'amber' ? 'bg-white text-amber-600' :
+              'bg-white text-blue-600'
             }`}>
-              <alert.icon size={24} />
+              <alert.icon size={28} />
             </div>
             <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-xs font-black uppercase tracking-widest ${
                   alert.color === 'rose' ? 'text-rose-600' :
                   alert.color === 'amber' ? 'text-amber-600' :
                   'text-blue-600'
                 }`}>
                   {alert.level}
                 </span>
-                <span className="text-xs text-slate-400">Há 5 min</span>
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Há 5 min</span>
               </div>
-              <h3 className="font-bold text-slate-800">{alert.type}</h3>
-              <p className="text-slate-600 text-sm mt-1">{alert.message}</p>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">{alert.type}</h3>
+              <p className="text-slate-600 font-medium mt-1 leading-relaxed">{alert.message}</p>
             </div>
           </motion.div>
         ))}
       </div>
 
-      <div className="card bg-slate-50 border-dashed border-slate-300 flex flex-col items-center justify-center py-12 text-slate-400">
-        <Info size={32} strokeWidth={1} className="mb-2" />
-        <p className="text-sm">O sistema verifica automaticamente novas regras a cada 30 minutos.</p>
+      <div className="card bg-slate-50 border-dashed border-4 border-slate-100 flex flex-col items-center justify-center py-16 text-slate-400 rounded-[40px]">
+        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+          <Info size={32} strokeWidth={1.5} className="text-slate-200" />
+        </div>
+        <p className="text-sm font-bold uppercase tracking-widest">O sistema verifica automaticamente novas regras a cada 30 minutos.</p>
       </div>
     </div>
   );

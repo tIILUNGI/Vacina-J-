@@ -55,22 +55,24 @@ export default function Reports() {
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {reportTypes.map((report) => (
           <motion.button
             key={report.id}
-            whileHover={{ y: -4 }}
+            whileHover={{ y: -8 }}
             onClick={() => setActiveReport(report.id)}
-            className="card text-left hover:border-emerald-500 transition-all group"
+            className="card text-left border-none shadow-xl shadow-blue-900/5 hover:shadow-2xl transition-all group p-8"
           >
-            <div className={`w-12 h-12 ${report.color} rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-${report.color.split('-')[1]}-200`}>
-              <report.icon size={24} />
+            <div className={`w-16 h-16 ${report.color} rounded-[24px] flex items-center justify-center text-white mb-8 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform`}>
+              <report.icon size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">{report.title}</h3>
-            <p className="text-sm text-slate-500 mb-6">{report.desc}</p>
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Gerar Agora</span>
-              <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
+            <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight group-hover:text-[--color-brand-primary] transition-colors uppercase">{report.title}</h3>
+            <p className="text-slate-500 font-medium leading-relaxed mb-8">{report.desc}</p>
+            <div className="flex items-center justify-between pt-6 border-t border-slate-50">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Gerar Agora</span>
+              <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-blue-50 group-hover:text-[--color-brand-primary] transition-all">
+                <ChevronRight size={20} />
+              </div>
             </div>
           </motion.button>
         ))}
@@ -80,32 +82,34 @@ export default function Reports() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="card"
+          className="card border-none shadow-2xl shadow-blue-900/10 p-10"
         >
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600">
-                <Calendar size={20} />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-12">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-blue-50 rounded-[24px] flex items-center justify-center text-[--color-brand-primary] shadow-inner">
+                <Calendar size={32} />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-800">Visualização: {reportTypes.find(r => r.id === activeReport)?.title}</h2>
-                <p className="text-sm text-slate-500">Período: {new Date().toLocaleDateString('pt-AO', { month: 'long', year: 'numeric' })}</p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{reportTypes.find(r => r.id === activeReport)?.title}</h2>
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-1">Período: {new Date().toLocaleDateString('pt-AO', { month: 'long', year: 'numeric' })}</p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button className="btn-secondary">
-                <Printer size={18} /> Imprimir
+            <div className="flex gap-4 w-full md:w-auto">
+              <button className="btn-secondary flex-1 md:flex-none justify-center">
+                <Printer size={20} /> Imprimir
               </button>
-              <button className="btn-primary">
-                <Download size={18} /> Exportar PDF
+              <button className="btn-primary flex-1 md:flex-none justify-center">
+                <Download size={20} /> Exportar PDF
               </button>
             </div>
           </div>
 
-          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-12 flex flex-col items-center justify-center text-slate-400">
-            <FileText size={64} strokeWidth={1} className="mb-4" />
-            <p className="text-lg font-medium">Os dados estão a ser processados...</p>
-            <p className="text-sm">Esta funcionalidade requer a base de dados preenchida com registos reais.</p>
+          <div className="bg-slate-50/50 rounded-[40px] border-4 border-dashed border-slate-100 p-20 flex flex-col items-center justify-center text-slate-300">
+            <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center mb-6 shadow-sm">
+              <FileText size={48} strokeWidth={1.5} className="text-slate-200" />
+            </div>
+            <p className="text-2xl font-black text-slate-900 tracking-tight mb-2">Processando dados...</p>
+            <p className="text-slate-400 font-medium text-center max-w-md">Esta funcionalidade requer a base de dados preenchida com registos reais para gerar as estatísticas oficiais.</p>
           </div>
         </motion.div>
       )}

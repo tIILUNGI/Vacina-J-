@@ -1,5 +1,5 @@
 {
-  "name": "FLAME ME - Sistema de Registo de Vacinação",
-  "description": "Sistema offline-first para gestão de postos de vacinação em Angola, eliminando registos manuais e automatizando controlo de stock e relatórios.",
+  "name": "Vacina Já - Sistema de Registo de Vacinação",
+  "description": "Sistema profissional offline-first para postos de vacinação em Angola. Gestão de stock, calendário MINSA automatizado e relatórios institucionais.",
   "requestFramePermissions": []
 }
