@@ -1,34 +1,76 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertCircle, Clock, Bell, Package, Info } from 'lucide-react';
 import { motion } from 'motion/react';
+import { localStorageService, StockItem, Vaccination, Patient } from '../utils/localStorage';
 
 export default function Alerts() {
-  const alerts = [
-    { 
-      id: 1, 
-      level: 'URGENTE', 
-      type: 'Frasco Quase Expirado', 
-      message: 'Frasco de Penta expira em 2 horas — 3 doses restantes',
-      icon: Clock,
-      color: 'rose'
-    },
-    { 
-      id: 2, 
-      level: 'ATENÇÃO', 
-      type: 'Dose em Atraso', 
-      message: 'Maria Silva — 2ª dose Polio estava prevista para 12/01/2025',
-      icon: AlertCircle,
-      color: 'amber'
-    },
-    { 
-      id: 3, 
-      level: 'INFO', 
-      type: 'Stock Baixo', 
-      message: 'BCG — apenas 2 frascos em stock',
-      icon: Package,
-      color: 'blue'
+  const [alerts, setAlerts] = useState<any[]>([]);
+  
+  useEffect(() => {
+    // Generate alerts from localStorage data
+    const stock = localStorageService.stock.getAll();
+    const vaccinations = localStorageService.vaccinations.getAll();
+    const patients = localStorageService.patients.getAll();
+    
+    const newAlerts: any[] = [];
+    
+    // Low stock alerts
+    stock.forEach((item: StockItem) => {
+      if (item.quantidade <= item.minStock) {
+        newAlerts.push({
+          id: `stock-${item.id}`,
+          level: item.quantidade === 0 ? 'URGENTE' : 'ATENÇÃO',
+          type: 'Stock Baixo',
+          message: `${item.nome} — apenas ${item.quantidade} frascos em stock`,
+          icon: Package,
+          color: item.quantidade === 0 ? 'rose' : 'amber'
+        });
+      }
+    });
+    
+    // Total patients vaccinated today
+    const today = new Date().toISOString().split('T')[0];
+    const todayVaccs = vaccinations.filter((v: Vaccination) => 
+      v.data_vacinacao && v.data_vacinacao.startsWith(today)
+    );
+    
+    if (todayVaccs.length > 0) {
+      newAlerts.push({
+        id: 'today-vacc',
+        level: 'INFO',
+        type: 'Vacinações Hoje',
+        message: `${todayVaccs.length} dose(s) administrada(s) hoje`,
+        icon: Clock,
+        color: 'blue'
+      });
     }
-  ];
+    
+    // Total patients
+    if (patients.length > 0) {
+      newAlerts.push({
+        id: 'total-patients',
+        level: 'INFO',
+        type: 'Total Pacientes',
+        message: `${patients.length} paciente(s) cadastrado(s) no sistema`,
+        icon: Bell,
+        color: 'blue'
+      });
+    }
+    
+    // If no alerts, show info message
+    if (newAlerts.length === 0) {
+      newAlerts.push({
+        id: 'no-alerts',
+        level: 'INFO',
+        type: 'Sistema OK',
+        message: 'Não há alertas no momento. Todos os estoques estão OK.',
+        icon: Bell,
+        color: 'blue'
+      });
+    }
+    
+    setAlerts(newAlerts);
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

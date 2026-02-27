@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Patient, Vaccine, Administration, getVaccineStatus, calculateAge } from '../utils/vaccineRules';
+import { localStorageService, Patient as LocalPatient, Vaccination, StockItem } from '../utils/localStorage';
 import apiFetch from '../utils/api';
 
 export default function Vaccinate({ patientId, onComplete }: { patientId?: number | null; onComplete?: () => void }) {
@@ -38,6 +39,15 @@ export default function Vaccinate({ patientId, onComplete }: { patientId?: numbe
 
   const fetchPatientById = async (id: number) => {
     try {
+      // Try localStorage first (offline mode)
+      const patient = localStorageService.patients.getById(id);
+      if (patient) {
+        // Get vaccination history for this patient
+        const history = localStorageService.vaccinations.getByPatientId(id);
+        setSelectedPatient({ ...patient, history } as any);
+        return;
+      }
+      // Fallback to API
       const res = await apiFetch(`/api/pacientes/${id}`);
       const data = await res.json();
       setSelectedPatient(data);
@@ -48,9 +58,17 @@ export default function Vaccinate({ patientId, onComplete }: { patientId?: numbe
 
   const fetchVaccines = async () => {
     try {
-      const res = await apiFetch('/api/vacinas');
-      const data = await res.json();
-      setVaccines(data);
+      // Get vaccines from localStorage (stock)
+      const stockItems = localStorageService.stock.getAll();
+      const vaccines = stockItems.map((item: StockItem) => ({
+        id: item.id,
+        nome: item.nome,
+        doses_por_frasco: 10,
+        prazo_uso_horas: 6,
+        grupo_alvo: 'Geral',
+        total_doses_esquema: 1
+      }));
+      setVaccines(vaccines as any);
     } catch (error) {
       console.error('Error fetching vaccines:', error);
     }
@@ -64,9 +82,9 @@ export default function Vaccinate({ patientId, onComplete }: { patientId?: numbe
     }
     setLoading(true);
     try {
-      const res = await apiFetch(`/api/pacientes?q=${query}`);
-      const data = await res.json();
-      setPatients(data);
+      // Use localStorage for offline mode
+      const results = localStorageService.patients.search(query);
+      setPatients(results as any);
     } catch (error) {
       console.error('Error searching patients:', error);
     } finally {
@@ -76,6 +94,16 @@ export default function Vaccinate({ patientId, onComplete }: { patientId?: numbe
 
   const handleSelectPatient = async (patient: Patient) => {
     try {
+      // Get full patient data and vaccination history from localStorage
+      const fullPatient = localStorageService.patients.getById(patient.id);
+      if (fullPatient) {
+        const history = localStorageService.vaccinations.getByPatientId(patient.id);
+        setSelectedPatient({ ...fullPatient, history } as any);
+        setPatients([]);
+        setSearch('');
+        return;
+      }
+      // Fallback to API
       const res = await apiFetch(`/api/pacientes/${patient.id}`);
       const data = await res.json();
       setSelectedPatient(data);
@@ -86,7 +114,7 @@ export default function Vaccinate({ patientId, onComplete }: { patientId?: numbe
     }
   };
 
-  const handleAdminister = async (vaccine: Vaccine) => {
+const handleAdminister = async (vaccine: Vaccine) => {
     try {
       const res = await apiFetch('/api/administrar', {
         method: 'POST',

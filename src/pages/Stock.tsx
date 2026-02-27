@@ -13,15 +13,7 @@ import {
   Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import apiFetch from '../utils/api';
-
-interface StockItem {
-  vacina_nome: string;
-  vacina_id: number;
-  frascos_disponiveis: number;
-  frascos_abertos: number;
-  validade_proxima: string;
-}
+import { localStorageService, StockItem } from '../utils/localStorage';
 
 export default function Stock() {
   const [activeTab, setActiveTab] = useState<'current' | 'entry' | 'waste' | 'vaccines' | 'history'>('current');
@@ -35,17 +27,15 @@ export default function Stock() {
 
   useEffect(() => {
     fetchStock();
-    fetchVaccines();
     fetchHistory();
     const savedUser = localStorage.getItem('vacina_ja_user');
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  const fetchStock = async () => {
+  const fetchStock = () => {
     try {
-      const res = await apiFetch('/api/stock');
-      const data = await res.json();
-      setStock(data);
+      const allStock = localStorageService.stock.getAll();
+      setStock(allStock);
     } catch (error) {
       console.error('Error fetching stock:', error);
     } finally {
@@ -53,55 +43,75 @@ export default function Stock() {
     }
   };
 
-  const fetchHistory = async () => {
-    try {
-      const res = await apiFetch('/api/stock/history');
-      const data = await res.json();
-      setHistory(data);
-    } catch (error) {
-      console.error('Error fetching history:', error);
-    }
+  const fetchHistory = () => {
+    // For offline mode, we can derive history from stock entries
+    // For now, we'll just show the current stock as history
+    setHistory([]);
   };
 
-  const fetchVaccines = async () => {
-    try {
-      const res = await apiFetch('/api/vacinas');
-      const data = await res.json();
-      setVaccines(data);
-    } catch (error) {
-      console.error('Error fetching vaccines:', error);
-    }
-  };
-
-  const handleDeleteStock = async (id: number) => {
+  const handleDeleteStock = (id: number) => {
     if (!confirm('Tem certeza que deseja eliminar este registo de stock?')) return;
     try {
-      const res = await apiFetch(`/api/stock/${id}`, { method: 'DELETE' });
-      if (res.ok) {
+      const success = localStorageService.stock.delete(id);
+      if (success) {
         fetchStock();
-        fetchHistory();
       } else {
-        const err = await res.json();
-        alert(err.error);
+        alert('Erro ao eliminar stock');
       }
     } catch (error) {
       console.error('Error deleting stock:', error);
     }
   };
 
-  const handleDeleteVaccine = async (id: number) => {
-    if (!confirm('Tem certeza que deseja eliminar esta vacina? Isso pode afectar registos históricos.')) return;
+  const handleAddStock = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    const stockData = {
+      nome: formData.get('vacina_nome') as string,
+      quantidade: parseInt(formData.get('quantidade') as string) || 0,
+      validade: formData.get('validade') as string,
+      lote: formData.get('lote') as string,
+    };
+
     try {
-      const res = await apiFetch(`/api/vacinas/${id}`, { method: 'DELETE' });
-      if (res.ok) fetchVaccines();
+      localStorageService.stock.add(stockData as any);
+      setActiveTab('current');
+      fetchStock();
     } catch (error) {
-      console.error('Error deleting vaccine:', error);
+      console.error('Error adding stock:', error);
     }
   };
 
-  const handleBackup = async () => {
-    window.location.href = '/api/system/backup';
+  const handleBackup = () => {
+    // Export all data to a JSON file
+    const data = {
+      patients: localStorageService.patients.getAll(),
+      stock: localStorageService.stock.getAll(),
+      vaccinations: localStorageService.vaccinations.getAll(),
+      exportDate: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vacina_ja_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
+
+  // Vaccine names for the dropdown
+  const vaccineNames = [
+    'Vacina BCG',
+    'Vacina Poliomielite (OPV)',
+    'Vacina Pentavalente',
+    'Vacina Febre Amarela',
+    'Vacina Sarampo',
+    'Vacina COVID-19',
+    'Vacina Hepatite B',
+    'Vacina Antitetânica'
+  ];
 
   return (
     <div className="space-y-8">
@@ -125,14 +135,6 @@ export default function Stock() {
             icon={History} 
             label="Histórico" 
           />
-          {user?.role === 'admin' && (
-            <TabButton 
-              active={activeTab === 'vaccines'} 
-              onClick={() => setActiveTab('vaccines')} 
-              icon={Search} 
-              label="Vacinas" 
-            />
-          )}
           <TabButton 
             active={activeTab === 'waste'} 
             onClick={() => setActiveTab('waste')} 
@@ -169,33 +171,30 @@ export default function Stock() {
               <thead className="bg-slate-50/50 border-b border-slate-50">
                 <tr>
                   <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Vacina</th>
-                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Frascos Disp.</th>
-                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Frascos Abertos</th>
-                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Próxima Validade</th>
+                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Quantidade</th>
+                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Lote</th>
+                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Validade</th>
                   <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Estado</th>
+                  {user?.role === 'admin' && (
+                    <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Acções</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {stock.map((item) => (
-                  <tr key={item.vacina_id} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="p-6 font-black text-slate-900 text-lg tracking-tight">{item.vacina_nome}</td>
-                    <td className="p-6 text-slate-600 font-bold">{item.frascos_disponiveis || 0}</td>
-                    <td className="p-6">
-                      <span className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest ${
-                        item.frascos_abertos > 0 ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {item.frascos_abertos > 0 ? `${item.frascos_abertos} Aberto` : 'Nenhum'}
-                      </span>
-                    </td>
+                  <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="p-6 font-black text-slate-900 text-lg tracking-tight">{item.nome}</td>
+                    <td className="p-6 text-slate-600 font-bold">{item.quantidade || 0}</td>
+                    <td className="p-6 text-slate-600 font-medium">{item.lote || 'N/A'}</td>
                     <td className="p-6 text-slate-600 font-medium">
-                      {item.validade_proxima ? new Date(item.validade_proxima).toLocaleDateString('pt-AO') : 'N/A'}
+                      {item.validade ? new Date(item.validade).toLocaleDateString('pt-AO') : 'N/A'}
                     </td>
                     <td className="p-6 text-right">
-                      {(item.frascos_disponiveis || 0) > 5 ? (
+                      {(item.quantidade || 0) > 5 ? (
                         <span className="text-blue-600 flex items-center justify-end gap-2 text-sm font-black uppercase tracking-widest">
                           <CheckCircle2 size={18} /> Suficiente
                         </span>
-                      ) : (item.frascos_disponiveis || 0) > 0 ? (
+                      ) : (item.quantidade || 0) > 0 ? (
                         <span className="text-blue-400 flex items-center justify-end gap-2 text-sm font-black uppercase tracking-widest">
                           <AlertCircle size={18} /> Baixo
                         </span>
@@ -205,6 +204,17 @@ export default function Stock() {
                         </span>
                       )}
                     </td>
+                    {user?.role === 'admin' && (
+                      <td className="p-6 text-right">
+                        <button 
+                          onClick={() => handleDeleteStock(item.id)}
+                          className="p-2 text-rose-400 hover:text-rose-600 transition-colors"
+                          title="Eliminar stock"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -227,97 +237,21 @@ export default function Stock() {
                   <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Vacina</th>
                   <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Lote</th>
                   <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Validade</th>
-                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Estado</th>
-                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Acções</th>
+                  <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-widest">Quantidade</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {history.map((h) => (
+                {stock.map((h) => (
                   <tr key={h.id} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="p-6 text-slate-600 font-medium">{new Date(h.data_entrada).toLocaleDateString('pt-AO')}</td>
-                    <td className="p-6 font-black text-slate-900">{h.vacina_nome}</td>
+                    <td className="p-6 text-slate-600 font-medium">{h.created_at ? new Date(h.created_at).toLocaleDateString('pt-AO') : 'N/A'}</td>
+                    <td className="p-6 font-black text-slate-900">{h.nome}</td>
                     <td className="p-6 text-slate-600">{h.lote}</td>
-                    <td className="p-6 text-slate-600">{new Date(h.validade).toLocaleDateString('pt-AO')}</td>
-                    <td className="p-6">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                        h.estado === 'disponivel' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                        h.estado === 'aberto' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
-                        'bg-slate-100 text-slate-400'
-                      }`}>
-                        {h.estado}
-                      </span>
-                    </td>
-                    <td className="p-6 text-right">
-                      {user?.role === 'admin' && h.estado === 'disponivel' && (
-                        <button 
-                          onClick={() => handleDeleteStock(h.id)}
-                          className="p-2 text-rose-400 hover:text-rose-600 transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      )}
-                    </td>
+                    <td className="p-6 text-slate-600">{h.data_validade ? new Date(h.data_validade).toLocaleDateString('pt-AO') : 'N/A'}</td>
+                    <td className="p-6 text-slate-600">{h.quantidade}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </motion.div>
-        )}
-
-        {activeTab === 'vaccines' && (
-          <motion.div 
-            key="vaccines"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Catálogo de Vacinas</h2>
-              <button 
-                onClick={() => {
-                  setEditingVaccine(null);
-                  setShowVaccineForm(true);
-                }}
-                className="btn-primary"
-              >
-                <Plus size={20} /> Nova Vacina
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {vaccines.map((v) => (
-                <div key={v.id} className="card p-6 border-none shadow-xl shadow-blue-900/5 flex flex-col group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                      <Package size={24} />
-                    </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => {
-                          setEditingVaccine(v);
-                          setShowVaccineForm(true);
-                        }}
-                        className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100"
-                      >
-                        <History size={16} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteVaccine(v.id)}
-                        className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-black text-slate-900 mb-1">{v.nome}</h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{v.grupo_alvo}</p>
-                  <div className="mt-auto pt-4 border-t border-slate-50 flex justify-between text-sm">
-                    <span className="text-slate-500 font-bold">Doses/Frasco:</span>
-                    <span className="font-black text-blue-600">{v.doses_por_frasco}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </motion.div>
         )}
 
@@ -330,29 +264,12 @@ export default function Stock() {
             className="card max-w-2xl mx-auto p-10 border-none shadow-2xl shadow-blue-900/5"
           >
             <h2 className="text-3xl font-black text-slate-900 mb-10 tracking-tight uppercase">Registar Entrada</h2>
-            <form className="space-y-8" onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const data = Object.fromEntries(formData.entries());
-              try {
-                const res = await apiFetch('/api/stock/entrada', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ...data, userId: user?.id })
-                });
-                if (res.ok) {
-                  setActiveTab('current');
-                  fetchStock();
-                }
-              } catch (error) {
-                console.error('Error adding stock:', error);
-              }
-            }}>
+            <form className="space-y-8" onSubmit={handleAddStock}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2">
                   <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Vacina *</label>
-                  <select name="vacina_id" required className="input-field">
-                    {vaccines.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                  <select name="vacina_nome" required className="input-field">
+                    {vaccineNames.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -389,81 +306,6 @@ export default function Stock() {
             </div>
             <p className="text-xl font-black text-slate-900 tracking-tight">Nenhum desperdício registado no período.</p>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Vaccine Modal */}
-      <AnimatePresence>
-        {showVaccineForm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-[32px] lg:rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              <div className="p-6 lg:p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50 flex-shrink-0">
-                <h2 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight uppercase">
-                  {editingVaccine ? 'Editar Vacina' : 'Nova Vacina'}
-                </h2>
-                <button onClick={() => setShowVaccineForm(false)} className="w-10 h-10 flex items-center justify-center bg-white rounded-xl text-slate-400 hover:text-slate-900 transition-all shadow-sm">
-                  <X size={24} />
-                </button>
-              </div>
-              <form className="p-6 lg:p-10 space-y-6 overflow-y-auto" onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const data = Object.fromEntries(formData.entries());
-                try {
-                  const url = editingVaccine ? `/api/vacinas/${editingVaccine.id}` : '/api/vacinas';
-                  const method = editingVaccine ? 'PUT' : 'POST';
-                  const res = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                  });
-                  if (res.ok) {
-                    setShowVaccineForm(false);
-                    fetchVaccines();
-                  }
-                } catch (error) {
-                  console.error('Error saving vaccine:', error);
-                }
-              }}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Nome da Vacina</label>
-                    <input name="nome" defaultValue={editingVaccine?.nome} required className="input-field" placeholder="Ex: BCG" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Doses por Frasco</label>
-                    <input name="doses_por_frasco" type="number" defaultValue={editingVaccine?.doses_por_frasco} required className="input-field" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Prazo Uso (Horas)</label>
-                    <input name="prazo_uso_horas" type="number" defaultValue={editingVaccine?.prazo_uso_horas} required className="input-field" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Grupo Alvo</label>
-                    <select name="grupo_alvo" defaultValue={editingVaccine?.grupo_alvo || 'crianca'} className="input-field">
-                      <option value="crianca">Criança</option>
-                      <option value="gravida">Grávida</option>
-                      <option value="mif">Mulher Idade Fértil</option>
-                      <option value="todos">Todos</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Total Doses Esquema</label>
-                    <input name="total_doses_esquema" type="number" defaultValue={editingVaccine?.total_doses_esquema || 1} required className="input-field" />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-4 pt-8 border-t border-slate-50">
-                  <button type="button" onClick={() => setShowVaccineForm(false)} className="btn-secondary px-8">Cancelar</button>
-                  <button type="submit" className="btn-primary px-10">Salvar Vacina</button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
         )}
       </AnimatePresence>
     </div>

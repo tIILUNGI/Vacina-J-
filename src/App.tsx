@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Home, 
-  Users, 
-  Syringe, 
-  Package, 
-  Bell, 
-  BarChart3, 
-  Plus, 
-  Search, 
-  ChevronRight, 
-  AlertCircle, 
-  Clock, 
-  CheckCircle2, 
+import {
+  Home,
+  Users,
+  Syringe,
+  Package,
+  Bell,
+  BarChart3,
+  Plus,
+  Search,
+  ChevronRight,
+  AlertCircle,
+  Clock,
+  CheckCircle2,
   XCircle,
   Menu,
   X,
@@ -28,6 +28,7 @@ import {
   Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { initializeLocalStorage, getCurrentSession, clearSession, authenticateUser, registerUser } from './utils/localStorage';
 import apiFetch from './utils/api';
 
 // Pages
@@ -85,14 +86,15 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Check session on mount
+  // Initialize local storage and check session on mount
   useEffect(() => {
+    initializeLocalStorage(); // Initialize default data
+    
     try {
-      const savedUser = localStorage.getItem('vacina_ja_user');
+      const savedUser = getCurrentSession();
       if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        setUser(parsed);
-        fetchNotifications(parsed.id);
+        setUser(savedUser);
+        fetchNotifications(savedUser.id);
       }
     } catch (e) {
       console.error('Error loading user from localStorage:', e);
@@ -119,6 +121,20 @@ export default function App() {
     const formData = new FormData(e.currentTarget);
     const { username, password } = Object.fromEntries(formData);
     
+    // Try localStorage authentication first (offline mode)
+    try {
+      const user = authenticateUser(username as string, password as string);
+      if (user) {
+        setUser(user);
+        localStorage.setItem('vacina_ja_user', JSON.stringify(user));
+        setLoginError('');
+        return;
+      }
+    } catch (err) {
+      console.error('Local auth error:', err);
+    }
+    
+    // Fallback to API if available
     try {
       const res = await apiFetch('/api/auth/login', {
         method: 'POST',
@@ -135,7 +151,7 @@ export default function App() {
         setLoginError('Utilizador ou palavra-passe incorretos.');
       }
     } catch (err) {
-      setLoginError('Erro ao ligar ao servidor.');
+      setLoginError('Utilizador ou palavra-passe incorretos.');
     }
   };
 
@@ -150,6 +166,7 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('vacina_ja_user');
+    clearSession();
   };
 
   const markNotificationRead = async (id: number) => {
@@ -191,12 +208,11 @@ export default function App() {
                 </div>
                 
                 <h1 className="text-4xl font-black text-white tracking-tighter mb-2 uppercase drop-shadow-lg">Vacina Já</h1>
-                <p className="text-blue-100 font-bold uppercase tracking-widest text-xs mb-2">Sistema de Vacinação Amigo • Angola</p>
+                <p className="text-blue-100 font-bold uppercase tracking-widest text-xs mb-2">Sistema de Vacinação • Angola</p>
               </div>
             </div>
             
             <div className="p-8 md:p-10">
-
               {loginMode === 'login' && (
                 <form className="space-y-5 text-left" onSubmit={handleLogin}>
                   {loginError && (
@@ -268,6 +284,15 @@ export default function App() {
                     <button type="button" onClick={() => setLoginMode('register')} className="text-slate-500 hover:text-blue-600 font-bold text-sm transition-colors">
                       Criar Nova Conta
                     </button>
+                  </div>
+
+                  {/* MINSA Logo at bottom */}
+                  <div className="mt-6 flex justify-center">
+                    <img 
+                      src="/minsa.png" 
+                      alt="MINSA" 
+                      className="h-16 w-auto object-contain"
+                    />
                   </div>
                 </form>
               )}
@@ -343,7 +368,10 @@ export default function App() {
             <img src="/logo.jpeg" alt="Vacina Já" className="w-8 h-8 object-contain" />
           </div>
           {isSidebarOpen && (
-            <span className="font-black text-2xl tracking-tight text-slate-900 truncate">VACINA JÁ</span>
+            <div className="flex flex-col">
+              <span className="font-black text-2xl tracking-tight text-slate-900 truncate">VACINA JÁ</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest -mt-1">Sistema de Vacinação • Angola</span>
+            </div>
           )}
         </div>
 

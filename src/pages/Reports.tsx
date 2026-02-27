@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   FileText, 
@@ -8,12 +8,42 @@ import {
   Trash2, 
   TrendingUp,
   ChevronRight,
-  Printer
+  Printer,
+  Syringe,
+  Package
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { localStorageService, StockItem, Vaccination, Patient } from '../utils/localStorage';
 
 export default function Reports() {
   const [activeReport, setActiveReport] = useState<string | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  
+  useEffect(() => {
+    // Get data from localStorage
+    const stock = localStorageService.stock.getAll();
+    const vaccinations = localStorageService.vaccinations.getAll();
+    const patients = localStorageService.patients.getAll();
+    
+    const today = new Date().toISOString().split('T')[0];
+    const todayVaccs = vaccinations.filter((v: Vaccination) => 
+      v.data_vacinacao && v.data_vacinacao.startsWith(today)
+    );
+    
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const monthVaccs = vaccinations.filter((v: Vaccination) => 
+      v.data_vacinacao && v.data_vacinacao.startsWith(thisMonth)
+    );
+    
+    setStats({
+      totalPatients: patients.length,
+      totalVaccinations: vaccinations.length,
+      todayVaccinations: todayVaccs.length,
+      monthVaccinations: monthVaccs.length,
+      totalStock: stock.reduce((sum: number, item: StockItem) => sum + item.quantidade, 0),
+      lowStockItems: stock.filter((item: StockItem) => item.quantidade <= item.minStock).length,
+    });
+  }, []);
 
   const reportTypes = [
     { 
@@ -105,11 +135,58 @@ export default function Reports() {
           </div>
 
           <div className="bg-slate-50/50 rounded-[40px] border-4 border-dashed border-slate-100 p-20 flex flex-col items-center justify-center text-slate-300">
-            <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center mb-6 shadow-sm">
-              <FileText size={48} strokeWidth={1.5} className="text-slate-200" />
-            </div>
-            <p className="text-2xl font-black text-slate-900 tracking-tight mb-2">Processando dados...</p>
-            <p className="text-slate-400 font-medium text-center max-w-md">Esta funcionalidade requer a base de dados preenchida com registos reais para gerar as estatísticas oficiais.</p>
+            {stats && activeReport === 'diario' && (
+              <div className="w-full max-w-2xl">
+                <h3 className="text-2xl font-black text-slate-900 mb-8 text-center">Resumo do Dia</h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-3xl shadow-sm">
+                    <Syringe size={32} className="text-blue-600 mb-4" />
+                    <p className="text-4xl font-black text-slate-900">{stats.todayVaccinations}</p>
+                    <p className="text-sm text-slate-500 font-bold uppercase">Doses Hoje</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl shadow-sm">
+                    <Users size={32} className="text-emerald-600 mb-4" />
+                    <p className="text-4xl font-black text-slate-900">{stats.totalPatients}</p>
+                    <p className="text-sm text-slate-500 font-bold uppercase">Pacientes Cadastrados</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {stats && activeReport === 'mensal' && (
+              <div className="w-full max-w-2xl">
+                <h3 className="text-2xl font-black text-slate-900 mb-8 text-center">Consolidado Mensal</h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-3xl shadow-sm">
+                    <Syringe size={32} className="text-blue-600 mb-4" />
+                    <p className="text-4xl font-black text-slate-900">{stats.monthVaccinations}</p>
+                    <p className="text-sm text-slate-500 font-bold uppercase">Doses este Mês</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl shadow-sm">
+                    <Users size={32} className="text-emerald-600 mb-4" />
+                    <p className="text-4xl font-black text-slate-900">{stats.totalPatients}</p>
+                    <p className="text-sm text-slate-500 font-bold uppercase">Pacientes Cadastrados</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {stats && (activeReport === 'paciente' || activeReport === 'desperdicio' || activeReport === 'cobertura') && (
+              <>
+                <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center mb-6 shadow-sm">
+                  <FileText size={48} strokeWidth={1.5} className="text-slate-200" />
+                </div>
+                <p className="text-2xl font-black text-slate-900 tracking-tight mb-2">Em Desenvolvimento</p>
+                <p className="text-slate-400 font-medium text-center max-w-md">Esta funcionalidade está a ser desenvolvida para a próxima versão.</p>
+              </>
+            )}
+            {!stats && (
+              <>
+                <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center mb-6 shadow-sm">
+                  <FileText size={48} strokeWidth={1.5} className="text-slate-200" />
+                </div>
+                <p className="text-2xl font-black text-slate-900 tracking-tight mb-2">Processando dados...</p>
+                <p className="text-slate-400 font-medium text-center max-w-md">Esta funcionalidade requer a base de dados preenchida com registos reais para gerar as estatísticas oficiais.</p>
+              </>
+            )}
           </div>
         </motion.div>
       )}
