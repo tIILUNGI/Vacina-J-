@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Patient, Administration, calculateAge, getVaccineStatus, Vaccine } from '../utils/vaccineRules';
+import apiFetch from '../utils/api';
 
 export default function Patients() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -39,7 +40,7 @@ export default function Patients() {
   const fetchPatients = async (query = '') => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/pacientes${query ? `?q=${query}` : ''}`);
+      const res = await apiFetch(`/api/pacientes${query ? `?q=${query}` : ''}`);
       const data = await res.json();
       setPatients(data);
     } catch (error) {
@@ -51,7 +52,7 @@ export default function Patients() {
 
   const fetchVaccines = async () => {
     try {
-      const res = await fetch('/api/vacinas');
+      const res = await apiFetch('/api/vacinas');
       const data = await res.json();
       setVaccines(data);
     } catch (error) {
@@ -66,7 +67,7 @@ export default function Patients() {
 
   const handleSelectPatient = async (id: number) => {
     try {
-      const res = await fetch(`/api/pacientes/${id}`);
+      const res = await apiFetch(`/api/pacientes/${id}`);
       const data = await res.json();
       setSelectedPatient(data);
     } catch (error) {
@@ -77,7 +78,7 @@ export default function Patients() {
   const handleDeletePatient = async (id: number) => {
     if (!confirm('Tem certeza que deseja eliminar este paciente?')) return;
     try {
-      const res = await fetch(`/api/pacientes/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/pacientes/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setSelectedPatient(null);
         fetchPatients();

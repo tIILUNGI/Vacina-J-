@@ -7,9 +7,13 @@ import {
   Clock, 
   AlertCircle,
   ChevronRight,
+  Play,
+  FileText,
+  TrendingUp,
   Plus
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import apiFetch from '../utils/api';
 
 interface Stats {
   dosesHoje: number;
@@ -26,7 +30,18 @@ interface OpenVial {
   prazo_uso_horas: number;
 }
 
-export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => void }) {
+interface Appointment {
+  id: number;
+  paciente_id: number;
+  vaccine_id: number;
+  data_agendada: string;
+  hora_agendada: string;
+  status: string;
+  paciente_nome: string;
+  vaccine_nome: string;
+}
+
+export default function Dashboard({ onNavigate }: { onNavigate: (page: any, patientId?: number) => void }) {
   const [stats, setStats] = useState<Stats>({ dosesHoje: 0, pacientesHoje: 0, frascosAbertos: 0, alertasPendentes: 0 });
   const [openVials, setOpenVials] = useState<OpenVial[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -36,16 +51,25 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
     async function fetchData() {
       try {
         const [statsRes, vialsRes, appointmentsRes] = await Promise.all([
-          fetch('/api/dashboard/stats'),
-          fetch('/api/stock/abertos'),
-          fetch('/api/agendamentos/today')
+          apiFetch('/api/dashboard/stats'),
+          apiFetch('/api/stock/abertos'),
+          apiFetch('/api/agendamentos/today')
         ]);
         const statsData = await statsRes.json();
         const vialsData = await vialsRes.json();
         const appointmentsData = await appointmentsRes.json();
+        // Sort by hora_agendada and vaccine type
+        const sortedAppointments = appointmentsData.sort((a: Appointment, b: Appointment) => {
+          // First by time
+          if (a.hora_agendada !== b.hora_agendada) {
+            return a.hora_agendada.localeCompare(b.hora_agendada);
+          }
+          // Then by vaccine name
+          return a.vaccine_nome.localeCompare(b.vaccine_nome);
+        });
         setStats(statsData);
         setOpenVials(vialsData);
-        setAppointments(appointmentsData);
+        setAppointments(sortedAppointments);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -126,8 +150,10 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
           <div className="card">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Pacientes Previstos para Hoje</h2>
-              <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest">
-                {appointments.length} Agendados
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest">
+                  {appointments.length} Agendados
+                </span>
               </div>
             </div>
             
@@ -137,28 +163,37 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: any) => v
                   <p className="font-medium">Nenhum agendamento para hoje</p>
                 </div>
               ) : (
-                appointments.map((appt) => (
-                  <div key={appt.id} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-3xl hover:border-blue-200 hover:shadow-lg hover:shadow-blue-500/5 transition-all group">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                        <Clock size={24} />
-                      </div>
-                      <div>
-                        <h4 className="font-black text-slate-900">{appt.paciente_nome}</h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{appt.hora_agendada}</span>
-                          <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">• {appt.vacina_nome}</span>
+                <div className="space-y-3">
+                  {appointments.map((appt) => (
+                    <motion.div 
+                      key={appt.id} 
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-3xl hover:border-blue-200 hover:shadow-lg hover:shadow-blue-500/5 transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
+                          <Clock size={22} />
+                        </div>
+                        <div>
+                          <h4 className="font-black text-slate-900">{appt.paciente_nome}</h4>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{appt.hora_agendada}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{appt.vacina_nome}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <button 
-                      onClick={() => onNavigate('vaccinate')}
-                      className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/20 transition-all"
-                    >
-                      <Plus size={20} />
-                    </button>
-                  </div>
-                ))
+                      <button 
+                        onClick={() => onNavigate('vaccinate', appt.paciente_id)}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 transition-all hover:scale-105 active:scale-95"
+                      >
+                        <Play size={16} fill="currentColor" />
+                        Iniciar
+                      </button>
+                    </motion.div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import apiFetch from '../utils/api';
 
 interface User {
   id: number;
@@ -35,7 +36,7 @@ export default function Settings() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/users');
+      const res = await apiFetch('/api/users');
       const data = await res.json();
       setUsers(data);
     } catch (error) {
@@ -48,7 +49,7 @@ export default function Settings() {
   const handleDeleteUser = async (id: number) => {
     if (!confirm('Tem certeza que deseja eliminar este utilizador?')) return;
     try {
-      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/users/${id}`, { method: 'DELETE' });
       if (res.ok) fetchUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -149,17 +150,25 @@ export default function Settings() {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const data = Object.fromEntries(formData.entries());
+                // Generate temporary password if not editing
+                const payload = editingUser ? data : {
+                  ...data,
+                  temporary_password: data.password
+                };
                 try {
                   const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
                   const method = editingUser ? 'PUT' : 'POST';
                   const res = await fetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(payload)
                   });
                   if (res.ok) {
                     setShowAddForm(false);
                     fetchUsers();
+                    if (!editingUser) {
+                      alert(`Utilizador criado com sucesso!\n\nNome de utilizador: ${data.username}\nPalavra-passe temporária: ${data.password}\n\nO utilizador deverá usar o "Primeiro Acesso" para ativar a sua conta.`);
+                    }
                   }
                 } catch (error) {
                   console.error('Error saving user:', error);
@@ -174,10 +183,15 @@ export default function Settings() {
                   <input name="username" defaultValue={editingUser?.username} required className="input-field" placeholder="Ex: joao.manuel" />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Email</label>
+                  <input name="email" type="email" defaultValue={editingUser?.email || ''} className="input-field" placeholder="Ex: joao@email.com" />
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">
-                    {editingUser ? 'Nova Palavra-passe (opcional)' : 'Palavra-passe'}
+                    {editingUser ? 'Nova Palavra-passe (opcional)' : 'Palavra-passe Temporária'}
                   </label>
                   <input name="password" type="password" required={!editingUser} className="input-field" placeholder="••••••••" />
+                  {!editingUser && <p className="text-xs text-slate-500">Esta será a palavra-passe temporária que o utilizador deverá alterar no primeiro acesso.</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1">Cargo / Função</label>
@@ -190,7 +204,7 @@ export default function Settings() {
                 <div className="flex justify-end gap-4 pt-8 border-t border-slate-50">
                   <button type="button" onClick={() => setShowAddForm(false)} className="btn-secondary px-8">Cancelar</button>
                   <button type="submit" className="btn-primary px-10">
-                    {editingUser ? 'Salvar Alterações' : 'Criar Conta'}
+                    {editingUser ? 'Salvar Alterações' : 'Criar Utilizador'}
                   </button>
                 </div>
               </form>

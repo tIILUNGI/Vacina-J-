@@ -239,13 +239,22 @@ async function startServer() {
   });
 
   app.post("/api/users", (req, res) => {
-    const { username, password, role, nome_completo } = req.body;
+    const { username, password, role, nome_completo, email, temporary_password } = req.body;
     try {
-      const info = db.prepare(`
-        INSERT INTO users (username, password, role, nome_completo)
-        VALUES (?, ?, ?, ?)
-      `).run(username, password, role, nome_completo);
-      res.json({ id: info.lastInsertRowid });
+      if (temporary_password) {
+        // Create user with temporary password (admin creates user)
+        const info = db.prepare(`
+          INSERT INTO users (username, password, role, nome_completo, email, activated, temporary_password)
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `).run(username, password, role, nome_completo, email, temporary_password);
+        res.json({ id: info.lastInsertRowid });
+      } else {
+        const info = db.prepare(`
+          INSERT INTO users (username, password, role, nome_completo, email)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(username, password, role, nome_completo, email);
+        res.json({ id: info.lastInsertRowid });
+      }
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
@@ -301,6 +310,11 @@ async function startServer() {
 
   app.put("/api/notifications/read/:id", (req, res) => {
     db.prepare("UPDATE notifications SET read = 1 WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/notifications/:id", (req, res) => {
+    db.prepare("DELETE FROM notifications WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
@@ -564,6 +578,92 @@ async function startServer() {
       frascosAbertos: frascosAbertos.count,
       alertasPendentes: stockBaixo.count
     });
+  });
+
+  // Reports API
+  // Daily vaccinations report
+  app.get("/api/reports/daily", (req, res) => {
+    const today = new Date().toISOString().split('T')[0];
+    const vaccinations = db.prepare(`
+      SELECT a.id, a.data_administracao, a.hora_administracao, a.observacoes,
+             p.nome_completo as paciente_nome, p.numero_identificacao,
+             v.nome as vacina_nome, v.fabricante,
+             u.nome_completo as enfermeiro_nome
+      FROM administracoes a
+      LEFT JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN vacinas v ON a.vacina_id = v.id
+      LEFT JOIN users u ON a.user_id = u.id
+      WHERE date(a.data_administracao) = date(?)
+      ORDER BY a.hora_administracao DESC
+    `).all(today);
+    res.json(vaccinations);
+  });
+
+  // Monthly vaccinations report
+  app.get("/api/reports/monthly", (req, res) => {
+    const firstDayOfMonth = new Date();
+    firstDayOfMonth.setDate(1);
+    const monthStart = firstDayOfMonth.toISOString().split('T')[0];
+    
+    const vaccinations = db.prepare(`
+      SELECT a.id, a.data_administracao, a.hora_administracao, a.observacoes,
+             p.nome_completo as paciente_nome, p.numero_identificacao,
+             v.nome as vacina_nome, v.fabricante,
+             u.nome_completo as enfermeiro_nome
+      FROM administracoes a
+      LEFT JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN vagas v ON a.vacina_id = v.id
+      LEFT JOIN users u ON a.user_id = u.id
+      WHERE date(a.data_administracao) >= date(?)
+      ORDER BY a.data_administracao DESC, a.hora_administracao DESC
+    `).all(monthStart);
+    res.json(vaccinations);
+  });
+
+  // Patient history report
+  app.get("/api/reports/patient-history/:patientId", (req, res) => {
+    const history = db.prepare(`
+      SELECT a.id, a.data_administracao, a.hora_administracao, a.observacoes,
+             v.nome as vacina_nome, v.fabricante, v.grupo_alvo,
+             u.nome_completo as enfermeiro_nome
+      FROM administracoes a
+      LEFT JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN vagas v ON a.vacina_id = v.id
+      LEFT JOIN users u ON a.user_id = u.id
+      WHERE a.paciente_id = ?
+      ORDER BY a.data_administracao DESC, a.hora_administracao DESC
+    `).all(req.params.patientId);
+    res.json(history);
+  });
+
+  // Waste report (expired/damaged vaccines)
+  app.get("/api/reports/waste", (req, res) => {
+    const waste = db.prepare(`
+      SELECT s.id, s.lote, s.quantidade_original, s.quantidade_usada, s.quantidade_perdida,
+             s.data_expiracao, s.status, s.motivo_perda,
+             v.nome as vaga_nome, v.fabricante,
+             u.nome_completo as registado_por
+      FROM stock s
+      LEFT JOIN vagas v ON s.vaga_id = v.id
+      LEFT JOIN users u ON s.user_id = u.id
+      WHERE s.status = 'perdido' OR s.quantidade_perdida > 0
+      ORDER BY s.data_expiracao ASC
+    `).all();
+    res.json(waste);
+  });
+
+  // Coverage report (vaccinations by target group)
+  app.get("/api/reports/coverage", (req, res) => {
+    const coverage = db.prepare(`
+      SELECT v.grupo_alvo, 
+             COUNT(DISTINCT a.paciente_id) as total_vacinados,
+             (SELECT COUNT(*) FROM pacientes) as total_pacientes,
+             COUNT(*) as total_doses
+      FROM administracoes a
+      LEFT JOIN vagas v ON a.vacina_id = v.id
+      GROUP BY v.grupo_alvo
+    `).all();
+    res.json(coverage);
   });
 
   // Backup API

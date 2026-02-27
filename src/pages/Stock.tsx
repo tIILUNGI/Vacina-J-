@@ -13,6 +13,7 @@ import {
   Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import apiFetch from '../utils/api';
 
 interface StockItem {
   vacina_nome: string;
@@ -42,7 +43,7 @@ export default function Stock() {
 
   const fetchStock = async () => {
     try {
-      const res = await fetch('/api/stock');
+      const res = await apiFetch('/api/stock');
       const data = await res.json();
       setStock(data);
     } catch (error) {
@@ -54,7 +55,7 @@ export default function Stock() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch('/api/stock/history');
+      const res = await apiFetch('/api/stock/history');
       const data = await res.json();
       setHistory(data);
     } catch (error) {
@@ -64,7 +65,7 @@ export default function Stock() {
 
   const fetchVaccines = async () => {
     try {
-      const res = await fetch('/api/vacinas');
+      const res = await apiFetch('/api/vacinas');
       const data = await res.json();
       setVaccines(data);
     } catch (error) {
@@ -75,7 +76,7 @@ export default function Stock() {
   const handleDeleteStock = async (id: number) => {
     if (!confirm('Tem certeza que deseja eliminar este registo de stock?')) return;
     try {
-      const res = await fetch(`/api/stock/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/stock/${id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchStock();
         fetchHistory();
@@ -91,7 +92,7 @@ export default function Stock() {
   const handleDeleteVaccine = async (id: number) => {
     if (!confirm('Tem certeza que deseja eliminar esta vacina? Isso pode afectar registos históricos.')) return;
     try {
-      const res = await fetch(`/api/vacinas/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/vacinas/${id}`, { method: 'DELETE' });
       if (res.ok) fetchVaccines();
     } catch (error) {
       console.error('Error deleting vaccine:', error);
@@ -334,7 +335,7 @@ export default function Stock() {
               const formData = new FormData(e.currentTarget);
               const data = Object.fromEntries(formData.entries());
               try {
-                const res = await fetch('/api/stock/entrada', {
+                const res = await apiFetch('/api/stock/entrada', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...data, userId: user?.id })

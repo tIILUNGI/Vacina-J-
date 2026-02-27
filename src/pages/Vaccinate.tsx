@@ -14,8 +14,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Patient, Vaccine, Administration, getVaccineStatus, calculateAge } from '../utils/vaccineRules';
+import apiFetch from '../utils/api';
 
-export default function Vaccinate() {
+export default function Vaccinate({ patientId, onComplete }: { patientId?: number | null; onComplete?: () => void }) {
   const [search, setSearch] = useState('');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -28,11 +29,26 @@ export default function Vaccinate() {
     fetchVaccines();
     const savedUser = localStorage.getItem('vacina_ja_user');
     if (savedUser) setUser(JSON.parse(savedUser));
-  }, []);
+    
+    // If patientId is provided, fetch that patient
+    if (patientId) {
+      fetchPatientById(patientId);
+    }
+  }, [patientId]);
+
+  const fetchPatientById = async (id: number) => {
+    try {
+      const res = await apiFetch(`/api/pacientes/${id}`);
+      const data = await res.json();
+      setSelectedPatient(data);
+    } catch (error) {
+      console.error('Error fetching patient by id:', error);
+    }
+  };
 
   const fetchVaccines = async () => {
     try {
-      const res = await fetch('/api/vacinas');
+      const res = await apiFetch('/api/vacinas');
       const data = await res.json();
       setVaccines(data);
     } catch (error) {
@@ -48,7 +64,7 @@ export default function Vaccinate() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/pacientes?q=${query}`);
+      const res = await apiFetch(`/api/pacientes?q=${query}`);
       const data = await res.json();
       setPatients(data);
     } catch (error) {
@@ -60,7 +76,7 @@ export default function Vaccinate() {
 
   const handleSelectPatient = async (patient: Patient) => {
     try {
-      const res = await fetch(`/api/pacientes/${patient.id}`);
+      const res = await apiFetch(`/api/pacientes/${patient.id}`);
       const data = await res.json();
       setSelectedPatient(data);
       setPatients([]);
@@ -72,7 +88,7 @@ export default function Vaccinate() {
 
   const handleAdminister = async (vaccine: Vaccine) => {
     try {
-      const res = await fetch('/api/administrar', {
+      const res = await apiFetch('/api/administrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -86,6 +102,7 @@ export default function Vaccinate() {
       if (res.ok) {
         setShowConfirm(null);
         if (selectedPatient) handleSelectPatient(selectedPatient);
+        if (onComplete) onComplete();
       } else {
         const err = await res.json();
         alert(err.error || 'Erro ao administrar vacina');
